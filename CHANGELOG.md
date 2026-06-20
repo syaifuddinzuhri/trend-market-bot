@@ -5,6 +5,16 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.1] — 2026-06-20
+
+### Fixed
+- **Dashboard infinite scroll** — canvas equity curve di-wrap dalam `<div style="height:220px">` agar Chart.js tidak expand unbounded
+- **Dashboard scroll reset** — ganti `<meta http-equiv="refresh">` dengan `setInterval(load, 10000)` sehingga posisi scroll tidak kembali ke atas setiap 10 detik
+- **ForexFactory rate limit (429)** — `bot/calendar.py` kini menerapkan hard cooldown 1 jam untuk *semua* fetch (sukses maupun gagal); timestamp disimpan ke `calendar_cache.json` sehingga cooldown bertahan saat restart
+- **Dependency build error** — `pandas` dinaikkan ke `2.2.3` dan `numpy` ke `2.1.3` yang menyediakan wheel prebuilt untuk Python 3.13 (mencegah error Meson / MSVC saat `setup.bat`)
+
+---
+
 ## [1.3.0] — 2026-06-20
 
 ### Added

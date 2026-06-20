@@ -122,7 +122,6 @@ HTML = """<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="10">
 <title>TrendBot Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
@@ -169,7 +168,9 @@ canvas { border-radius: 8px; background: #161b22; border: 1px solid #30363d; }
 
 <section>
   <h2>Equity Curve (Cumulative PnL)</h2>
-  <canvas id="eq-chart" height="120"></canvas>
+  <div style="position:relative; height:220px;">
+    <canvas id="eq-chart"></canvas>
+  </div>
 </section>
 
 <section>
@@ -268,6 +269,7 @@ async function load() {
 }
 
 load();
+setInterval(load, 10000);
 </script>
 </body>
 </html>"""

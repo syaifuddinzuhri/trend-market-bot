@@ -34,6 +34,8 @@ HIGH_IMPACT_KEYWORDS = [
 WIB = timezone(timedelta(hours=7))
 _cached_events: list[dict] = []
 _last_fetch_date: str = ""
+_last_fetch_ts: float = 0.0        # epoch seconds of last actual HTTP request
+FETCH_COOLDOWN_SECONDS = 3600      # ForexFactory updates feed once per hour — never fetch more often
 
 
 def _keyword_match(title: str) -> bool:
@@ -85,35 +87,40 @@ def fetch_calendar() -> list[dict]:
 
 
 def refresh(force: bool = False):
-    """Refresh cache jika belum dilakukan hari ini."""
-    global _cached_events, _last_fetch_date
+    """Fetch calendar dari ForexFactory — maksimal sekali per jam."""
+    global _cached_events, _last_fetch_date, _last_fetch_ts
+    import time
 
-    today = datetime.now(WIB).strftime("%Y-%m-%d")
-    if not force and _last_fetch_date == today and _cached_events:
+    now_ts = time.time()
+
+    # Hard rate-limit: never hit the API more than once per hour (success or failure)
+    if not force and (now_ts - _last_fetch_ts) < FETCH_COOLDOWN_SECONDS:
         return
 
     os.makedirs("logs", exist_ok=True)
+    _last_fetch_ts = now_ts  # stamp BEFORE the request so concurrent calls are blocked
 
+    today = datetime.now(WIB).strftime("%Y-%m-%d")
     events = fetch_calendar()
     if events:
         _cached_events = events
         _last_fetch_date = today
         with open(CACHE_FILE, "w") as f:
-            json.dump({"date": today, "events": events}, f, indent=2)
+            json.dump({"date": today, "events": events, "fetched_ts": now_ts}, f, indent=2)
         log_console(f"[CAL] Calendar cache updated — {len(events)} events")
     else:
-        # Coba load dari cache lama
         _load_cache()
 
 
 def _load_cache():
-    global _cached_events, _last_fetch_date
+    global _cached_events, _last_fetch_date, _last_fetch_ts
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE) as f:
                 data = json.load(f)
             _cached_events = data.get("events", [])
             _last_fetch_date = data.get("date", "")
+            _last_fetch_ts = float(data.get("fetched_ts", 0.0))
             log_console(f"[CAL] Loaded {len(_cached_events)} events from cache ({_last_fetch_date})")
         except Exception as e:
             log_console(f"[CAL] Cache load error: {e}", level="WARN")

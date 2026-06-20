@@ -1,6 +1,6 @@
 # TrendBot — XAUUSD Trend Following Bot
 
-> **v1.3.0** — [Lihat CHANGELOG](CHANGELOG.md)
+> **v1.3.1** — [Lihat CHANGELOG](CHANGELOG.md)
 
 Bot trading otomatis untuk **XAUUSD** berbasis trend following multi-timeframe.
 Dijalankan di **MetaTrader 5** (Windows), notifikasi via **Telegram**.
@@ -341,7 +341,7 @@ Events yang difilter:
   PPI, GDP, Unemployment Rate, Interest Rate, Jackson Hole
 
 Cache   : logs/calendar_cache.json
-Refresh : startup + setiap 6 jam
+Refresh : maksimal sekali per jam (hard rate-limit — sesuai kebijakan ForexFactory)
 Fallback: jika internet mati → pakai cache terakhir
 Manual  : tambahkan event di bot/news_filter.py (NEWS_EVENTS_UTC)
 ```
