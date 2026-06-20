@@ -1,5 +1,7 @@
 # TrendBot — XAUUSD Trend Following Bot
 
+> **v1.2.0** — [Lihat CHANGELOG](CHANGELOG.md)
+
 Bot trading otomatis untuk **XAUUSD** berbasis trend following multi-timeframe.
 Dijalankan di **MetaTrader 5** (Windows), notifikasi via **Telegram**.
 
@@ -61,6 +63,54 @@ Engulfing: body candle saat ini menelan body candle sebelumnya
 ✅ Daily trade limit    : belum mencapai MAX_TRADES_PER_DAY
 ✅ Tidak ada posisi induk yang sedang terbuka
 ```
+
+---
+
+## Multi-Entry Mid-Session
+
+Setelah entry pertama, bot bisa membuka posisi tambahan selama tren masih valid.
+
+### Alur Logika
+
+```
+Tidak ada posisi?
+  → Cari PRIMARY signal (setup lengkap multi-TF)
+
+Ada posisi < MAX_CONCURRENT_POSITIONS?
+  → Tunggu MIN_ENTRY_INTERVAL menit sejak entry terakhir
+  → Cek jarak harga MIN_ENTRY_DISTANCE_ATR dari posisi yang ada
+  → Cari CONTINUATION signal (harus searah posisi yang ada)
+
+Sudah MAX_CONCURRENT_POSITIONS?
+  → Skip pencarian signal, kelola posisi yang ada saja
+```
+
+### Dua Jenis Continuation Signal
+
+**EMA Retest M15**
+```
+1. BOS sudah terkonfirmasi dalam 20 candle M15 terakhir
+2. Harga pullback menyentuh EMA20 M15
+3. Terbentuk Pin Bar atau Engulfing
+→ Lot: 80% dari lot normal
+```
+
+**HLC Continuation** (Higher Low / Lower High)
+```
+1. Swing Low baru di H1 lebih tinggi dari sebelumnya (Higher Low)
+   atau Swing High baru lebih rendah (Lower High)
+2. Struktur M15 masih bullish/bearish (CHoCH cukup)
+3. Candle konfirmasi M15
+→ Lot: 80% dari lot normal
+```
+
+### Guard Anti-Overtrading
+
+| Parameter | Default | Fungsi |
+|-----------|---------|--------|
+| `MAX_CONCURRENT_POSITIONS` | 2 | Max posisi induk bersamaan |
+| `MIN_ENTRY_INTERVAL` | 30 mnt | Cooldown antar entry baru |
+| `MIN_ENTRY_DISTANCE_ATR` | 1.0× | Jarak harga min dari posisi lain |
 
 ---
 
@@ -158,6 +208,8 @@ trendbot/
 ## Konfigurasi `.env`
 
 ```env
+# Salin .env.example → .env lalu isi nilai yang kosong
+
 # ── MT5 Account ──────────────────────────────────────────────────
 MT5_LOGIN=12345678
 MT5_PASSWORD=your_password
@@ -193,6 +245,11 @@ BREAKEVEN_R=1.0               # pindah SL ke entry saat profit = 1R
 PYRAMID_ENABLED=true
 PYRAMID_LOT_RATIO=0.5         # lot pyramid = lot_awal × 0.5
 MAX_PYRAMID=1
+
+# ── Multi-Entry Mid-Session ──────────────────────────────────────
+MAX_CONCURRENT_POSITIONS=2    # max posisi induk bersamaan
+MIN_ENTRY_INTERVAL=30         # cooldown antar entry (menit)
+MIN_ENTRY_DISTANCE_ATR=1.0    # jarak harga min antar entry (× ATR H1)
 
 # ── Trade Limits ─────────────────────────────────────────────────
 MAX_TRADES_PER_DAY=5          # 0 = unlimited
@@ -239,6 +296,7 @@ run_backtest.bat
 | ✅ TP2 hit | Partial close 40%, trailing aktif |
 | 🏁 Trail exit | Sisa 30% exit via EMA20 H1 |
 | ❌ SL hit | Loss notification + PnL |
+| 🔄 Continuation | EMA Retest / HLC signal, lot 80%, searah posisi yang ada |
 | 📐 Pyramid | Posisi ke-2 dibuka, info parent ticket |
 | 🔁 Breakeven | SL dipindah ke entry |
 
