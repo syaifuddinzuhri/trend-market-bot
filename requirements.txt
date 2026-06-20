@@ -1,0 +1,8 @@
+MetaTrader5==5.0.45
+pandas==2.2.2
+numpy==1.26.4
+python-dotenv==1.0.1
+requests==2.32.3
+pytz==2024.1
+schedule==1.2.2
+flask==3.0.3
