@@ -149,3 +149,79 @@ def structure_strength(result: str) -> str:
     if result in (BULLISH_CHOCH, BEARISH_CHOCH):
         return "MODERATE"
     return "NONE"
+
+
+# ── Continuation setups untuk mid-session re-entry ───────────────
+
+def has_ema_retest_m15(df_m15: pd.DataFrame, direction: str, bos_lookback: int = 20) -> bool:
+    """
+    EMA Retest M15:
+    Setelah BOS terkonfirmasi dalam N candle terakhir,
+    harga pullback ke EMA20 M15 dan saat ini berada di area tersebut.
+
+    BUY  : ada BOS bullish dalam lookback bar → harga turun ke EMA20 M15 → berada di atasnya
+    SELL : ada BOS bearish dalam lookback bar → harga naik ke EMA20 M15 → berada di bawahnya
+    """
+    if len(df_m15) < bos_lookback + 10:
+        return False
+
+    # Cari apakah ada BOS dalam N candle terakhir
+    recent = df_m15.iloc[-(bos_lookback + 10):-1]
+    bos_found = False
+    for i in range(10, len(recent)):
+        sub = recent.iloc[:i + 1]
+        structure = get_market_structure(sub)
+        if direction == "BUY" and structure == BULLISH_BOS:
+            bos_found = True
+            break
+        if direction == "SELL" and structure == BEARISH_BOS:
+            bos_found = True
+            break
+
+    if not bos_found:
+        return False
+
+    last = df_m15.iloc[-1]
+    close = last["close"]
+    low   = last["low"]
+    high  = last["high"]
+    ema20 = last["ema20"]
+    atr   = last["atr"]
+    tolerance = atr * 0.3
+
+    if direction == "BUY":
+        # Harga menyentuh/mendekati EMA20 dari atas
+        touched = low <= ema20 + tolerance
+        above   = close >= ema20 - tolerance
+        return touched and above
+
+    if direction == "SELL":
+        # Harga menyentuh/mendekati EMA20 dari bawah
+        touched = high >= ema20 - tolerance
+        below   = close <= ema20 + tolerance
+        return touched and below
+
+    return False
+
+
+def has_hlc_continuation(df_h1: pd.DataFrame, direction: str) -> bool:
+    """
+    Higher Low Continuation (HLC) — BUY:
+    HL baru terkonfirmasi di H1: swing low terbaru > swing low sebelumnya.
+
+    Lower High Continuation (LHC) — SELL:
+    LH baru terkonfirmasi di H1: swing high terbaru < swing high sebelumnya.
+    """
+    swing_highs, swing_lows = _find_swings(df_h1, left=5, right=2)
+
+    if direction == "BUY":
+        if len(swing_lows) < 2:
+            return False
+        return swing_lows[-1][1] > swing_lows[-2][1]  # HL terkonfirmasi
+
+    if direction == "SELL":
+        if len(swing_highs) < 2:
+            return False
+        return swing_highs[-1][1] < swing_highs[-2][1]  # LH terkonfirmasi
+
+    return False

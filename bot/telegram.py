@@ -69,6 +69,20 @@ def notify_breakeven(ticket: int, symbol: str):
     send(msg)
 
 
+def notify_continuation(signal_type: str, direction: str, symbol: str, entry: float, sl: float, tp1: float, tp2: float, lot: float):
+    arrow = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+    label = "EMA RETEST" if signal_type == "EMA_RETEST" else "HLC CONTINUATION"
+    msg = (
+        f"🔄 *{arrow} {label} — {symbol}*\n"
+        f"Entry   : `{entry}`\n"
+        f"SL      : `{sl}`\n"
+        f"TP1     : `{tp1}`\n"
+        f"TP2     : `{tp2}`\n"
+        f"Lot     : `{lot}`"
+    )
+    send(msg)
+
+
 def notify_pyramid(direction: str, symbol: str, entry: float, sl: float, tp1: float, tp2: float, lot: float, parent_ticket: int):
     arrow = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
     msg = (

@@ -59,8 +59,16 @@ PYRAMID_ENABLED   = os.getenv("PYRAMID_ENABLED", "true").lower() == "true"
 PYRAMID_LOT_RATIO = float(os.getenv("PYRAMID_LOT_RATIO", 0.5))  # 50% dari lot awal
 MAX_PYRAMID       = int(os.getenv("MAX_PYRAMID", 1))             # max 1 pyramid per trade
 
+# ── Multi-entry mid-session ───────────────────────────────────────
+# Posisi induk yang boleh berjalan bersamaan (bukan pyramid)
+MAX_CONCURRENT_POSITIONS  = int(os.getenv("MAX_CONCURRENT_POSITIONS", 2))
+# Jarak waktu minimum antar entry baru (menit)
+MIN_ENTRY_INTERVAL        = int(os.getenv("MIN_ENTRY_INTERVAL", 30))
+# Jarak harga minimum antar entry (× ATR H1) — cegah entry terlalu berdekatan
+MIN_ENTRY_DISTANCE_ATR    = float(os.getenv("MIN_ENTRY_DISTANCE_ATR", 1.0))
+
 # Trade limits
-MAX_TRADES_PER_DAY = int(os.getenv("MAX_TRADES_PER_DAY", 1))    # 0 = unlimited
+MAX_TRADES_PER_DAY = int(os.getenv("MAX_TRADES_PER_DAY", 5))    # 0 = unlimited
 
 # News filter minutes
 NEWS_BUFFER_MINUTES = 30
