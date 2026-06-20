@@ -1,6 +1,6 @@
 # TrendBot — XAUUSD Trend Following Bot
 
-> **v1.2.0** — [Lihat CHANGELOG](CHANGELOG.md)
+> **v1.3.0** — [Lihat CHANGELOG](CHANGELOG.md)
 
 Bot trading otomatis untuk **XAUUSD** berbasis trend following multi-timeframe.
 Dijalankan di **MetaTrader 5** (Windows), notifikasi via **Telegram**.
@@ -197,8 +197,15 @@ trendbot/
 │   ├── trades.csv             CSV — backup log
 │   └── calendar_cache.json    Cache jadwal news (auto-refresh tiap 6 jam)
 │
+├── chart/
+│   ├── plotter.py             Builder chart Plotly (candlestick, EMA, trendline, markers)
+│   ├── trendlines.py          Swing detection, trendline builder, S/R cluster
+│   ├── run_chart.py           CLI chart generator
+│   └── output/                File HTML chart (tidak di-commit)
+│
 ├── setup.bat                  Install dependencies (jalankan sekali)
 ├── start_bot.bat              Jalankan bot trading
+├── start_chart.bat            Wizard chart interaktif
 ├── start_dashboard.bat        Jalankan dashboard monitoring
 └── run_backtest.bat           Wizard interaktif backtest
 ```
@@ -265,6 +272,28 @@ ADX_MIN=25                    # threshold ADX untuk BOS entry
 1. Jalankan setup.bat
 2. Isi .env dengan data akun MT5 dan Telegram
 ```
+
+### Chart Visualisasi
+```batch
+start_chart.bat
+→ Pilih timeframe (M15 / H1 / H4 / D1)
+→ Input jumlah bars
+→ Browser otomatis buka chart interaktif
+
+# Atau via CLI:
+python chart/run_chart.py --tf H1 --bars 300
+python chart/run_chart.py --tf M15 --bars 150 --no-bos
+```
+
+**Isi chart:**
+- Candlestick + EMA Ribbon (20/50/100/200)
+- Trendline otomatis dari swing high & low
+- Label HH / HL / LH / LL di setiap swing point
+- Marker BOS & CHoCH
+- S/R level horizontal (cluster swing points)
+- Entry/Exit dari trade log (▲ BUY, ▼ SELL, ★ TP, ✕ SL)
+- Panel ADX + panel ATR vs ATR_MA
+- Draw mode aktif — bisa gambar garis manual di browser
 
 ### Jalankan Bot
 ```batch

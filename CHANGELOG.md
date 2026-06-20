@@ -5,6 +5,34 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.0] — 2026-06-20
+
+### Added
+- **Chart interaktif** — visualisasi HTML berbasis Plotly, buka di browser
+- Candlestick chart dengan tema gelap
+- EMA Ribbon (20/50/100/200) dengan warna berbeda
+- Trendline otomatis dari swing high dan swing low
+- Support & Resistance level horizontal (cluster swing points)
+- Label swing: HH / HL / LH / LL di setiap swing point
+- Marker BOS / CHoCH (segitiga + teks) dari scan M15
+- Marker entry/exit dari trade log (▲ BUY, ▼ SELL, ★ TP, ✕ SL)
+- Garis SL dan TP dari setiap trade entry (transparan)
+- Panel ADX dengan threshold line (MIN, SKIP 20, STRONG 40)
+- Panel ATR vs ATR_MA dengan fill zona entry diizinkan
+- `chart/plotter.py` — builder utama chart Plotly
+- `chart/trendlines.py` — swing detection, trendline builder, S/R cluster
+- `chart/run_chart.py` — CLI dengan argumen `--tf`, `--bars`, `--no-trades`, dll
+- `start_chart.bat` — wizard interaktif pilih TF dan bars
+- Output disimpan ke `chart/output/chart_XAUUSD_M15.html`
+- Draw mode aktif di toolbar browser (bisa gambar garis manual)
+- `plotly==5.22.0` di requirements.txt
+
+### Changed
+- `.gitignore` — tambah `chart/output/` dan `logs/*.json`
+- `README.md` — tambah section Chart Visualisasi
+
+---
+
 ## [1.2.0] — 2026-06-20
 
 ### Added

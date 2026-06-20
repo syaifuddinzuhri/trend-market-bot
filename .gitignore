@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 logs/*.db
 logs/*.csv
+logs/*.json
+chart/output/
