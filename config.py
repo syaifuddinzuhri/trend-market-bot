@@ -45,13 +45,21 @@ MAX_SL_POINTS        = float(os.getenv("MAX_SL_POINTS", 30.0))   # 0 = tidak di-
 SWING_LOOKBACK_M5    = int(os.getenv("SWING_LOOKBACK_M5", 10))   # lookback swing untuk M5
 
 # ── TP 3-tier ─────────────────────────────────────────────────────
-# TP1: tutup TP1_PCT posisi saat profit mencapai TP1_R × SL-distance
-# TP2: tutup TP2_PCT posisi saat profit mencapai TP2_R × SL-distance
-# TP3: sisa posisi di-trail menggunakan EMA20 H1 (close di bawah/atas EMA20)
+# Mode: "pips" = fixed pip target | "r_multiple" = kelipatan SL distance
+TP_MODE = os.getenv("TP_MODE", "pips")        # "pips" atau "r_multiple"
+
+# Mode pips (default aktif)
+TP1_PIPS = float(os.getenv("TP1_PIPS", 50.0))   # pip ke TP1
+TP2_PIPS = float(os.getenv("TP2_PIPS", 80.0))   # pip ke TP2
+TP3_PIPS = float(os.getenv("TP3_PIPS", 120.0))  # pip ke TP3 (trailing mulai di sini)
+
+# Mode R-multiple (fallback jika TP_MODE=r_multiple)
 TP1_R   = float(os.getenv("TP1_R",   1.0))   # 1R
-TP1_PCT = float(os.getenv("TP1_PCT", 0.30))  # tutup 30%
 TP2_R   = float(os.getenv("TP2_R",   2.0))   # 2R
-TP2_PCT = float(os.getenv("TP2_PCT", 0.40))  # tutup 40%, sisa 30% trailing
+
+# Persentase close per tier (berlaku di kedua mode)
+TP1_PCT = float(os.getenv("TP1_PCT", 0.30))  # tutup 30% di TP1
+TP2_PCT = float(os.getenv("TP2_PCT", 0.40))  # tutup 40% di TP2, sisa 30% trailing
 
 # ── Breakeven ─────────────────────────────────────────────────────
 BREAKEVEN_R = float(os.getenv("BREAKEVEN_R", 1.0))

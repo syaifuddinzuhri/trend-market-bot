@@ -242,17 +242,34 @@ def manage_open_positions(symbol: str, df_h1=None):
         tick = mt5.symbol_info_tick(symbol)
         cur = tick.bid if direction == "BUY" else tick.ask
         profit_dist = (cur - entry) if direction == "BUY" else (entry - cur)
-        r = profit_dist / sl_dist
 
-        # ── Breakeven @ 1R ───────────────────────────────────────
-        if r >= config.BREAKEVEN_R and not state["be_set"]:
+        sym_info_mgmt = mt5.symbol_info(symbol)
+        pip_size = (sym_info_mgmt.point * 10) if sym_info_mgmt else 0.1
+
+        if config.TP_MODE == "pips":
+            tp1_trigger = config.TP1_PIPS * pip_size
+            tp2_trigger = config.TP2_PIPS * pip_size
+            tp3_trigger = config.TP3_PIPS * pip_size
+            be_trigger  = tp1_trigger * 0.5  # BE saat sudah 50% menuju TP1
+            tp1_hit_cond = profit_dist >= tp1_trigger
+            tp2_hit_cond = profit_dist >= tp2_trigger
+            be_cond      = profit_dist >= be_trigger
+        else:
+            r = profit_dist / sl_dist if sl_dist > 0 else 0
+            tp1_hit_cond = r >= config.TP1_R
+            tp2_hit_cond = r >= config.TP2_R
+            be_cond      = r >= config.BREAKEVEN_R
+            tp3_trigger  = sl_dist * config.TP2_R
+
+        # ── Breakeven ─────────────────────────────────────────────
+        if be_cond and not state["be_set"]:
             if _modify_sl(ticket, entry):
                 state["be_set"] = True
                 log_console(f"[MGMT] BE set | ticket={ticket} | entry={entry:.2f}")
                 telegram.notify_breakeven(ticket, symbol)
 
-        # ── TP1 @ TP1_R: tutup TP1_PCT ───────────────────────────
-        if r >= config.TP1_R and not state["tp1_hit"]:
+        # ── TP1 ───────────────────────────────────────────────────
+        if tp1_hit_cond and not state["tp1_hit"]:
             sym_info = mt5.symbol_info(symbol)
             lot_min = sym_info.volume_min if sym_info else 0.01
             lot_step = sym_info.volume_step if sym_info else 0.01
@@ -269,8 +286,8 @@ def manage_open_positions(symbol: str, df_h1=None):
                     "ticket": ticket, "result": "TP1", "pnl": round(pnl_est, 2),
                 })
 
-        # ── TP2 @ TP2_R: tutup TP2_PCT ───────────────────────────
-        if r >= config.TP2_R and state["tp1_hit"] and not state["tp2_hit"]:
+        # ── TP2 ───────────────────────────────────────────────────
+        if tp2_hit_cond and state["tp1_hit"] and not state["tp2_hit"]:
             # Re-fetch volume karena sudah partial close di TP1
             positions2 = mt5.positions_get(ticket=ticket)
             if positions2:

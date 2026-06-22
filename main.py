@@ -120,11 +120,20 @@ def _open_trade(sig: dict, df_h1, label: str = "", df_m5=None) -> bool:
         log_console("[BOT] SL distance tidak valid — skip", level="WARN")
         return False
 
-    tp = (
-        entry + sl_dist * config.TP2_R
-        if direction == "BUY"
-        else entry - sl_dist * config.TP2_R
-    )
+    sym_info = mt5.symbol_info(config.SYMBOL)
+    pip_size = (sym_info.point * 10) if sym_info else 0.1
+
+    if config.TP_MODE == "pips":
+        tp1_dist = config.TP1_PIPS * pip_size
+        tp2_dist = config.TP2_PIPS * pip_size
+        tp3_dist = config.TP3_PIPS * pip_size
+        tp1 = entry + tp1_dist if direction == "BUY" else entry - tp1_dist
+        tp  = entry + tp2_dist if direction == "BUY" else entry - tp2_dist  # TP2 ke MT5
+        tp3 = entry + tp3_dist if direction == "BUY" else entry - tp3_dist
+    else:
+        tp1 = entry + sl_dist * config.TP1_R if direction == "BUY" else entry - sl_dist * config.TP1_R
+        tp  = entry + sl_dist * config.TP2_R if direction == "BUY" else entry - sl_dist * config.TP2_R
+        tp3 = tp
 
     balance = connector.get_balance()
     lot = get_lot_size(config.SYMBOL, sl_dist, balance)
@@ -157,8 +166,6 @@ def _open_trade(sig: dict, df_h1, label: str = "", df_m5=None) -> bool:
 
         # Notif continuation terpisah
         if signal_type in ("EMA_RETEST", "HLC"):
-            sl_dist_price = abs(entry - sl)
-            tp1 = entry + sl_dist_price * config.TP1_R if direction == "BUY" else entry - sl_dist_price * config.TP1_R
             telegram.notify_continuation(signal_type, direction, config.SYMBOL, entry, sl, tp1, tp, lot)
 
         log_console(f"[BOT] {label} entry opened | ticket={ticket} | {direction} | lot={lot}")
