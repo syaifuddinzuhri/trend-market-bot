@@ -31,7 +31,7 @@ def _ok(v: bool) -> str:
     return "✅" if v else "❌"
 
 
-def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame):
+def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_m5: pd.DataFrame | None = None):
     """
     Cetak status semua filter setiap cycle — membantu entry manual di akun lain.
 
@@ -66,7 +66,10 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame):
         (direction == "SELL" and is_bearish_structure(structure))
     ) if trend_ok else False
 
-    pattern   = check_pattern(df_m15)
+    # M5 untuk candle (lebih presisi), fallback M15
+    entry_df  = df_m5 if df_m5 is not None else df_m15
+    entry_tf  = "M5" if df_m5 is not None else "M15"
+    pattern   = check_pattern(entry_df)
     bull_pat  = pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}
     bear_pat  = pattern in {BEARISH_PIN_BAR, BEARISH_ENGULFING}
     candle_ok = (direction == "BUY" and bull_pat) or (direction == "SELL" and bear_pat) if trend_ok else False
@@ -85,7 +88,7 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame):
     candle_short = {
         BULLISH_PIN_BAR: "PinBar↑", BULLISH_ENGULFING: "Engulf↑",
         BEARISH_PIN_BAR: "PinBar↓", BEARISH_ENGULFING: "Engulf↓",
-    }.get(pattern, "—")
+    }.get(pattern, "—") + f"[{entry_tf}]"
 
     if all_ok:
         status = "🟢 SIAP ENTRY"
@@ -177,15 +180,23 @@ def _candle_ok(df_m15: pd.DataFrame, direction: str) -> str | None:
     return None
 
 
-def evaluate(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame) -> dict | None:
+def evaluate(
+    df_h4: pd.DataFrame,
+    df_h1: pd.DataFrame,
+    df_m15: pd.DataFrame,
+    df_m5: pd.DataFrame | None = None,
+) -> dict | None:
     direction, trend, adx_val, atr_val = _base_filters(df_h4, df_h1)
     if direction is None:
         return None
 
+    # M15 → konfirmasi struktur BOS/CHoCH
     structure = get_market_structure(df_m15)
     if direction == "BUY" and not is_bullish_structure(structure):
+        log_console(f"[SIG] Struct M15={structure} tidak cocok arah {direction} — skip")
         return None
     if direction == "SELL" and not is_bearish_structure(structure):
+        log_console(f"[SIG] Struct M15={structure} tidak cocok arah {direction} — skip")
         return None
 
     strength = structure_strength(structure)
@@ -196,13 +207,17 @@ def evaluate(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame) -> 
     if not has_pullback(df_h1, trend):
         return None
 
-    pattern = _candle_ok(df_m15, direction)
+    # M5 → candle entry presisi (jika tersedia), fallback ke M15
+    entry_df = df_m5 if df_m5 is not None else df_m15
+    entry_tf  = "M5" if df_m5 is not None else "M15"
+    pattern = _candle_ok(entry_df, direction)
     if not pattern:
+        log_console(f"[SIG] Candle {entry_tf} tidak valid untuk {direction} — skip")
         return None
 
     log_console(
         f"[SIG] ✅ PRIMARY | {direction} | {structure} ({strength}) | "
-        f"ADX={adx_val:.1f} | ATR={atr_val:.4f} | pattern={pattern}"
+        f"ADX={adx_val:.1f} | ATR={atr_val:.4f} | pattern={pattern} [{entry_tf}]"
     )
     return {
         "signal_type":        "PRIMARY",
@@ -213,6 +228,7 @@ def evaluate(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame) -> 
         "adx":                adx_val,
         "atr":                atr_val,
         "pattern":            pattern,
+        "entry_tf":           entry_tf,
     }
 
 
@@ -221,6 +237,7 @@ def evaluate_continuation(
     df_h1: pd.DataFrame,
     df_m15: pd.DataFrame,
     existing_direction: str,
+    df_m5: pd.DataFrame | None = None,
 ) -> dict | None:
     direction, trend, adx_val, atr_val = _base_filters(df_h4, df_h1)
     if direction is None:
@@ -230,16 +247,19 @@ def evaluate_continuation(
     if adx_val < config.ADX_MIN:
         return None
 
-    pattern = _candle_ok(df_m15, direction)
+    # M5 untuk candle konfirmasi (lebih presisi), fallback M15
+    entry_df = df_m5 if df_m5 is not None else df_m15
+    entry_tf  = "M5" if df_m5 is not None else "M15"
+    pattern = _candle_ok(entry_df, direction)
     if not pattern:
         return None
 
     if has_ema_retest_m15(df_m15, direction):
-        log_console(f"[CONT] ✅ EMA_RETEST | {direction} | ADX={adx_val:.1f} | pattern={pattern}")
+        log_console(f"[CONT] ✅ EMA_RETEST | {direction} | ADX={adx_val:.1f} | pattern={pattern} [{entry_tf}]")
         return {
             "signal_type": "EMA_RETEST", "direction": direction, "trend": trend,
             "structure": "EMA_RETEST_M15", "structure_strength": "MODERATE",
-            "adx": adx_val, "atr": atr_val, "pattern": pattern,
+            "adx": adx_val, "atr": atr_val, "pattern": pattern, "entry_tf": entry_tf,
         }
 
     if has_hlc_continuation(df_h1, direction):
@@ -248,11 +268,11 @@ def evaluate_continuation(
             return None
         if direction == "SELL" and not is_bearish_structure(structure):
             return None
-        log_console(f"[CONT] ✅ HLC | {direction} | {structure} | ADX={adx_val:.1f} | pattern={pattern}")
+        log_console(f"[CONT] ✅ HLC | {direction} | {structure} | ADX={adx_val:.1f} | pattern={pattern} [{entry_tf}]")
         return {
             "signal_type": "HLC", "direction": direction, "trend": trend,
             "structure": structure, "structure_strength": "MODERATE",
-            "adx": adx_val, "atr": atr_val, "pattern": pattern,
+            "adx": adx_val, "atr": atr_val, "pattern": pattern, "entry_tf": entry_tf,
         }
 
     return None

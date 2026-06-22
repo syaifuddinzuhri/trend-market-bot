@@ -80,3 +80,4 @@ SWING_LOOKBACK = 20
 TF_H4  = None
 TF_H1  = None
 TF_M15 = None
+TF_M5  = None

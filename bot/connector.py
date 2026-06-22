@@ -26,9 +26,10 @@ def connect() -> bool:
     )
 
     # Resolve timeframe constants once connected
-    config.TF_H4 = mt5.TIMEFRAME_H4
-    config.TF_H1 = mt5.TIMEFRAME_H1
+    config.TF_H4  = mt5.TIMEFRAME_H4
+    config.TF_H1  = mt5.TIMEFRAME_H1
     config.TF_M15 = mt5.TIMEFRAME_M15
+    config.TF_M5  = mt5.TIMEFRAME_M5
 
     return True
 

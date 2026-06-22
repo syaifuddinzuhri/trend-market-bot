@@ -94,3 +94,12 @@ def get_m15(symbol: str) -> pd.DataFrame | None:
     df = add_adx(df, config.ADX_PERIOD)
     df = add_atr(df, config.ATR_PERIOD, config.ATR_MA_PERIOD)
     return df
+
+
+def get_m5(symbol: str) -> pd.DataFrame | None:
+    df = get_candles(symbol, config.TF_M5, 200)
+    if df is None:
+        return None
+    df = add_emas(df)
+    df = add_atr(df, config.ATR_PERIOD, config.ATR_MA_PERIOD)
+    return df

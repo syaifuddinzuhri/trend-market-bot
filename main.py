@@ -12,7 +12,7 @@ import MetaTrader5 as mt5
 import config
 from bot import connector, trade, telegram
 from bot import signals
-from bot.indicators import get_h4, get_h1, get_m15
+from bot.indicators import get_h4, get_h1, get_m15, get_m5
 from bot.risk import get_lot_size, calc_sl
 from bot.logger import log_console, log_trade
 from bot.session import is_trading_session
@@ -20,7 +20,7 @@ from bot.news_filter import is_news_lock
 from bot.calendar import refresh as calendar_refresh
 
 HEARTBEAT_INTERVAL    = 5    # detik antara console status
-SIGNAL_CHECK_INTERVAL = 15   # detik antara full signal check
+SIGNAL_CHECK_INTERVAL = 5    # detik antara full signal check (M5 butuh respons cepat)
 
 # Ticket yang dibuka bot session ini
 _open_tickets: set[int] = set()
@@ -228,13 +228,14 @@ def _run_signal_cycle():
     df_h4  = get_h4(config.SYMBOL)
     df_h1  = get_h1(config.SYMBOL)
     df_m15 = get_m15(config.SYMBOL)
+    df_m5  = get_m5(config.SYMBOL)
 
     if df_h4 is None or df_h1 is None or df_m15 is None:
         log_console("[BOT] Gagal ambil data candle", level="WARN")
         return
 
     # ── Tampilkan status semua filter (untuk monitoring & manual entry) ──
-    signals.scan_log(df_h4, df_h1, df_m15)
+    signals.scan_log(df_h4, df_h1, df_m15, df_m5)
 
     # ── Kelola posisi terbuka (TP1/TP2/Trail/Pyramid) ────────────
     trade.manage_open_positions(config.SYMBOL, df_h1=df_h1)
@@ -249,7 +250,7 @@ def _run_signal_cycle():
 
     # ── KASUS 1: Belum ada posisi → cari PRIMARY signal ──────────
     if n_open == 0:
-        sig = signals.evaluate(df_h4, df_h1, df_m15)
+        sig = signals.evaluate(df_h4, df_h1, df_m15, df_m5)
         if sig:
             _open_trade(sig, df_h1, label="PRIMARY")
         return
@@ -267,7 +268,7 @@ def _run_signal_cycle():
     # Ambil arah dari posisi yang sudah ada (hanya boleh searah)
     existing_dir = "BUY" if parent_positions[0].type == mt5.ORDER_TYPE_BUY else "SELL"
 
-    sig = signals.evaluate_continuation(df_h4, df_h1, df_m15, existing_dir)
+    sig = signals.evaluate_continuation(df_h4, df_h1, df_m15, existing_dir, df_m5)
     if sig:
         _open_trade(sig, df_h1, label=f"CONTINUATION ({sig['signal_type']})")
 
