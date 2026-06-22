@@ -5,6 +5,22 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.0] — 2026-06-22
+
+### Added
+- **Analisa market otomatis ke Telegram setiap 30 menit** — format lengkap:
+  - Trend H4 (BUY/SELL/SIDEWAYS)
+  - ADX + ATR H1
+  - Struktur M15 (BOS↑/BOS↓/CHoCH)
+  - Status filter `X/8` dengan emoji status (🟢/🔥/⏳/💤)
+  - Jika ada posisi terbuka: Entry / Sekarang / PnL floating / SL buffer / pip ke TP1 / TP2 / Lot
+- `notify_analysis()` di `bot/telegram.py`
+- `build_analysis()` di `bot/signals.py` — kumpulkan semua data analisa tanpa side effect
+- `_send_analysis()` di `main.py` — dipanggil setiap `ANALYSIS_INTERVAL=1800` detik
+- **Notifikasi LIMIT FILLED** — ketika pending order ter-fill, bot kirim notif `✅ LIMIT FILLED BUY/SELL` dengan Entry/SL/TP1/TP2/Lot
+
+---
+
 ## [1.5.5] — 2026-06-22
 
 ### Added
