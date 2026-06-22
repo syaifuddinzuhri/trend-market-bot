@@ -35,10 +35,13 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame):
     """
     Cetak status semua filter setiap cycle — membantu entry manual di akun lain.
 
-    Format:
-    [SCAN] BULLISH | Session✅ News✅ | ADX=28.3✅ ATR=21.5✅ | Pullback✅ | BOS=BULLISH_BOS✅ | Candle=ENGULFING✅ → 🟢 SIAP ENTRY
-    [SCAN] BULLISH | Session✅ News✅ | ADX=28.3✅ ATR=19.9❌ | Pullback✅ | BOS=NO_STRUCTURE❌ | Candle=NO_PATTERN❌ → ⏳ 2/6 filter
+    Format (semua filter lolos):
+    [SCAN] BUY | Session✅ News✅ | Trend✅ | ADX=28.3✅ ATR=21.5✅ | Pullback✅ | Struct=BOS↑✅ | Candle=Engulf↑✅ → 🟢 SIAP ENTRY
+    [SCAN]   ↳ Entry=3285.50 | SL=3271.30 (-14.20) | TP1=3299.70 (+14.20) | TP2=3313.90 (+28.40)
     """
+    import MetaTrader5 as mt5
+    from bot.risk import calc_sl
+
     session_ok = is_trading_session()
     news_ok    = not is_news_lock()
 
@@ -104,14 +107,36 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame):
         f"Candle={candle_short}{_ok(candle_ok)} → {status}"
     )
 
-    # Jika hampir entry, cetak detail tambahan untuk bantu manual entry
+    # Tampilkan proyeksi Entry / SL / TP jika 6+ filter lolos dan arah diketahui
+    if passed >= 6 and direction in ("BUY", "SELL"):
+        try:
+            tick = mt5.symbol_info_tick(config.SYMBOL)
+            if tick:
+                entry = tick.ask if direction == "BUY" else tick.bid
+                sl, sl_dist = calc_sl(df_h1, direction, entry)
+                if sl_dist > 0:
+                    tp1 = entry + sl_dist * config.TP1_R if direction == "BUY" else entry - sl_dist * config.TP1_R
+                    tp2 = entry + sl_dist * config.TP2_R if direction == "BUY" else entry - sl_dist * config.TP2_R
+                    sl_diff  = sl   - entry  # negatif untuk BUY
+                    tp1_diff = tp1  - entry  # positif untuk BUY
+                    tp2_diff = tp2  - entry
+                    log_console(
+                        f"[SCAN]   ↳ Entry={entry:.2f} | "
+                        f"SL={sl:.2f} ({sl_diff:+.2f}) | "
+                        f"TP1={tp1:.2f} ({tp1_diff:+.2f}) | "
+                        f"TP2={tp2:.2f} ({tp2_diff:+.2f})"
+                    )
+        except Exception:
+            pass
+
+    # Jika hampir entry, cetak filter mana yang belum terpenuhi
     if passed >= 6 and not all_ok:
         missing = []
-        if not struct_ok:  missing.append(f"Tunggu {direction} structure di M15")
-        if not candle_ok:  missing.append(f"Tunggu candle konfirmasi ({direction})")
+        if not struct_ok:   missing.append(f"Tunggu {direction} structure di M15")
+        if not candle_ok:   missing.append(f"Tunggu candle konfirmasi ({direction})")
         if not pullback_ok: missing.append(f"Tunggu pullback ke EMA20/50 H1")
-        if not atr_ok:     missing.append(f"Tunggu ATR naik (skrg {atr_val:.2f} < MA {atr_ma_val:.2f})")
-        if not adx_ok:     missing.append(f"Tunggu ADX naik (skrg {adx_val:.1f} < {config.ADX_MIN})")
+        if not atr_ok:      missing.append(f"Tunggu ATR naik (skrg {atr_val:.2f} < MA {atr_ma_val:.2f})")
+        if not adx_ok:      missing.append(f"Tunggu ADX naik (skrg {adx_val:.1f} < {config.ADX_MIN})")
         for m in missing:
             log_console(f"[SCAN]   ↳ {m}")
 
