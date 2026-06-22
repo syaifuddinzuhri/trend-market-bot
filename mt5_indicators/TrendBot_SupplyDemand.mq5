@@ -19,10 +19,10 @@ input double ImpulseBodyRatio = 0.50;  // body/range impulse minimum
 input double ImpulseBodyMult  = 1.5;   // body impulse >= N × rata-rata body base
 input int    MaxZones         = 10;    // max zona per tipe (supply & demand masing-masing)
 input bool   ShowMitigated    = true;  // tampilkan zona yang sudah ditembus (lebih gelap)
-input color  DemandColor      = C'0,30,0';    // fill hijau gelap
-input color  SupplyColor      = C'30,0,0';    // fill merah gelap
-input color  DemandColorUsed  = C'0,10,0';    // fill hijau sangat gelap (mitigated)
-input color  SupplyColorUsed  = C'10,0,0';    // fill merah sangat gelap (mitigated)
+input color  DemandColor      = C'0,12,0';    // fill hijau gelap
+input color  SupplyColor      = C'12,0,0';    // fill merah gelap
+input color  DemandColorUsed  = C'0,5,0';     // fill hijau sangat gelap (mitigated)
+input color  SupplyColorUsed  = C'5,0,0';     // fill merah sangat gelap (mitigated)
 input color  DemandBorder     = C'0,200,0';   // border hijau
 input color  SupplyBorder     = C'220,0,0';   // border merah
 input color  DemandBorderUsed = C'0,100,0';   // border hijau redup (mitigated)
