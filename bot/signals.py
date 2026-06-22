@@ -152,7 +152,7 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
     # ── Alert manual ke Telegram jika >= ALERT_MIN_FILTERS ───────
     if passed >= ALERT_MIN_FILTERS and direction in ("BUY", "SELL"):
         import time as _t
-        key = (config.SYMBOL, direction, passed)
+        key = (config.SYMBOL, direction)
         now = _t.time()
         last = _alert_sent_at.get(key, 0)
         if now - last >= config.ALERT_COOLDOWN_SECONDS:

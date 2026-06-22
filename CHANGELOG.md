@@ -5,6 +5,13 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.4] — 2026-06-22
+
+### Fixed
+- Alert manual spam — cooldown key menyertakan `passed` sehingga dianggap berbeda saat nilai berubah (6→7→6). Key sekarang hanya `(symbol, direction)` — satu alert per arah per 5 menit
+
+---
+
 ## [1.9.3] — 2026-06-22
 
 ### Changed
