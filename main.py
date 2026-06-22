@@ -332,6 +332,7 @@ def _check_closed_positions():
 
 
 def _run_signal_cycle():
+    global _last_pending_placed
     df_h4  = get_h4(config.SYMBOL)
     df_h1  = get_h1(config.SYMBOL)
     df_m15 = get_m15(config.SYMBOL)
