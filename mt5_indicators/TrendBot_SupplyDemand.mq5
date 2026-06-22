@@ -47,7 +47,10 @@ int    zone_count = 0;
 int OnInit()
 {
    IndicatorSetString(INDICATOR_SHORTNAME, "TrendBot S&D");
+   _DeleteAllZones();
+   zone_count = 0;
    ArrayResize(zones, MaxZones * 2);
+   ChartRedraw();
    return INIT_SUCCEEDED;
 }
 
