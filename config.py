@@ -88,6 +88,13 @@ NEWS_BUFFER_MINUTES = 30
 # Swing lookback bars (dipakai di H1 sekarang)
 SWING_LOOKBACK = 20
 
+# ── Re-entry after TP ─────────────────────────────────────────────
+# Setelah posisi tutup profit, bot boleh re-entry searah jika harga
+# pullback ke EMA — tanpa butuh BOS/CHoCH ulang.
+REENTRY_ENABLED         = os.getenv("REENTRY_ENABLED", "true").lower() == "true"
+REENTRY_WINDOW_MINUTES  = int(os.getenv("REENTRY_WINDOW_MINUTES", 90))   # window setelah TP
+REENTRY_MAX_COUNT       = int(os.getenv("REENTRY_MAX_COUNT", 2))          # max re-entry per sesi tren
+
 # ── Pending Order (Limit) ─────────────────────────────────────────
 PENDING_ENABLED             = os.getenv("PENDING_ENABLED", "true").lower() == "true"
 PENDING_MIN_FILTERS         = int(os.getenv("PENDING_MIN_FILTERS", 5))    # min filter lolos untuk pasang limit

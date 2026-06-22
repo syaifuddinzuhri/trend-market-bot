@@ -353,6 +353,74 @@ def evaluate(
     }
 
 
+def evaluate_reentry(
+    df_h4: pd.DataFrame,
+    df_h1: pd.DataFrame,
+    df_m15: pd.DataFrame,
+    reentry_direction: str,
+    df_m5: pd.DataFrame | None = None,
+) -> dict | None:
+    """
+    Re-entry setelah TP hit — syarat lebih ringan dari PRIMARY:
+    - Tidak butuh BOS/CHoCH ulang (tren sudah terkonfirmasi)
+    - Cukup: session + news + trend H4 sama arah + ADX + ATR + pullback H1 + candle
+
+    Dipanggil dari main.py saat n_open == 0 dan ada TP exit context.
+    """
+    if not is_trading_session():
+        return None
+    if is_news_lock():
+        return None
+
+    trend = get_trend(df_h4)
+    if trend == NO_TRADE:
+        return None
+
+    direction = "BUY" if trend == TREND_BULLISH else "SELL"
+    if direction != reentry_direction:
+        log_console(f"[REENTRY] Tren H4 berbalik ({reentry_direction}→{direction}) — batal re-entry")
+        return None
+
+    last_h1    = df_h1.iloc[-1]
+    adx_val    = last_h1["adx"]
+    atr_val    = last_h1["atr"]
+    atr_ma_val = last_h1.get("atr_ma", 0)
+
+    if adx_val < config.ADX_MIN:
+        log_console(f"[REENTRY] ADX={adx_val:.1f} < {config.ADX_MIN} — skip")
+        return None
+    if pd.isna(atr_ma_val) or atr_val < atr_ma_val * config.ATR_MA_RATIO:
+        log_console(f"[REENTRY] ATR terlalu lemah — skip")
+        return None
+
+    if not has_pullback(df_h1, trend):
+        log_console(f"[REENTRY] Belum ada pullback ke EMA H1 — tunggu")
+        return None
+
+    entry_df = df_m5 if df_m5 is not None else df_m15
+    entry_tf  = "M5" if df_m5 is not None else "M15"
+    pattern = _candle_ok(entry_df, direction)
+    if not pattern:
+        log_console(f"[REENTRY] Belum ada candle konfirmasi [{entry_tf}] — tunggu")
+        return None
+
+    log_console(
+        f"[REENTRY] ✅ RE-ENTRY | {direction} | "
+        f"ADX={adx_val:.1f} | ATR={atr_val:.4f} | pattern={pattern} [{entry_tf}]"
+    )
+    return {
+        "signal_type":        "REENTRY",
+        "direction":          direction,
+        "trend":              trend,
+        "structure":          "REENTRY_PULLBACK",
+        "structure_strength": "MODERATE",
+        "adx":                adx_val,
+        "atr":                atr_val,
+        "pattern":            pattern,
+        "entry_tf":           entry_tf,
+    }
+
+
 def evaluate_continuation(
     df_h4: pd.DataFrame,
     df_h1: pd.DataFrame,

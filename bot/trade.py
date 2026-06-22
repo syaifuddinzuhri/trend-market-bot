@@ -21,6 +21,72 @@ from bot import telegram
 # Keyed by ticket (int)
 _pos_state: dict[int, dict] = {}
 
+# ── Re-entry after TP registry ────────────────────────────────────
+# List of recent profitable closes yang memenuhi syarat re-entry.
+# Setiap entry: {direction, exit_price, exit_time, symbol, reentry_count}
+_recent_tp_exits: list[dict] = []
+
+
+def record_tp_exit(symbol: str, direction: str, exit_price: float):
+    """
+    Dipanggil saat posisi ditutup dengan profit (TP hit atau trail exit).
+    Menyimpan konteks untuk re-entry.
+    """
+    import time as _t
+    # Cari apakah sudah ada record arah yang sama — tambah counter
+    for rec in _recent_tp_exits:
+        if rec["symbol"] == symbol and rec["direction"] == direction:
+            rec["exit_price"] = exit_price
+            rec["exit_time"] = _t.time()
+            rec["reentry_count"] += 1
+            log_console(
+                f"[REENTRY] TP exit dicatat | {direction} @ {exit_price:.2f} | "
+                f"count={rec['reentry_count']}"
+            )
+            return
+
+    _recent_tp_exits.append({
+        "symbol":        symbol,
+        "direction":     direction,
+        "exit_price":    exit_price,
+        "exit_time":     _t.time(),
+        "reentry_count": 1,
+    })
+    log_console(f"[REENTRY] TP exit dicatat (baru) | {direction} @ {exit_price:.2f}")
+
+
+def get_reentry_context(symbol: str, direction: str) -> dict | None:
+    """
+    Return konteks re-entry jika:
+    - Ada TP exit untuk simbol + arah yang diminta
+    - Masih dalam REENTRY_WINDOW_MINUTES
+    - Belum melebihi REENTRY_MAX_COUNT
+    """
+    import time as _t
+    now = _t.time()
+    window = config.REENTRY_WINDOW_MINUTES * 60
+
+    for rec in _recent_tp_exits:
+        if rec["symbol"] != symbol or rec["direction"] != direction:
+            continue
+        age = now - rec["exit_time"]
+        if age > window:
+            continue
+        if rec["reentry_count"] > config.REENTRY_MAX_COUNT:
+            continue
+        return rec
+
+    return None
+
+
+def clear_reentry(symbol: str, direction: str):
+    """Hapus re-entry context (dipanggil saat tren berbalik atau session habis)."""
+    global _recent_tp_exits
+    _recent_tp_exits = [
+        r for r in _recent_tp_exits
+        if not (r["symbol"] == symbol and r["direction"] == direction)
+    ]
+
 
 def get_state(ticket: int) -> dict | None:
     return _pos_state.get(ticket)

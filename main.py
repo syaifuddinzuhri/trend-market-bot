@@ -321,8 +321,17 @@ def _check_closed_positions():
             log_console(f"[CLOSED] ticket={ticket} | {reason} | price={price} | PnL={pnl:+.2f}")
             if pnl < 0:
                 telegram.notify_sl(ticket, config.SYMBOL, price, pnl)
+                # Tren mungkin berbalik — bersihkan re-entry context
+                state = trade.get_state(ticket)
+                if state:
+                    trade.clear_reentry(config.SYMBOL, state["direction"])
             else:
                 telegram.notify_tp(ticket, config.SYMBOL, "FULL CLOSE", price, pnl)
+                # Simpan konteks re-entry — posisi tutup profit
+                if config.REENTRY_ENABLED:
+                    state = trade.get_state(ticket)
+                    if state and state.get("parent_ticket") is None:
+                        trade.record_tp_exit(config.SYMBOL, state["direction"], price)
             log_trade({
                 "symbol": config.SYMBOL, "ticket": ticket,
                 "result": "SL" if pnl < 0 else "CLOSED", "pnl": round(pnl, 2),
@@ -370,6 +379,20 @@ def _run_signal_cycle():
             trade.manage_pending_orders(config.SYMBOL, direction_valid=None)
             _open_trade(sig, df_h1, label="PRIMARY", df_m5=df_m5)
             return
+
+        # ── RE-ENTRY setelah TP ───────────────────────────────────
+        # Cek apakah ada TP exit yang baru terjadi dan masih dalam window.
+        # Evaluasi dengan syarat lebih ringan (tanpa BOS/CHoCH).
+        if config.REENTRY_ENABLED and _interval_ok():
+            for reentry_dir in ("SELL", "BUY"):
+                ctx = trade.get_reentry_context(config.SYMBOL, reentry_dir)
+                if ctx is None:
+                    continue
+                sig_re = signals.evaluate_reentry(df_h4, df_h1, df_m15, reentry_dir, df_m5)
+                if sig_re:
+                    trade.manage_pending_orders(config.SYMBOL, direction_valid=None)
+                    _open_trade(sig_re, df_h1, label=f"REENTRY#{ctx['reentry_count']}", df_m5=df_m5)
+                    return
 
         # Tidak ada market signal → coba pasang pending limit jika diaktifkan
         if config.PENDING_ENABLED and trade.get_pending_count(config.SYMBOL) == 0:

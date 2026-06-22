@@ -5,6 +5,27 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.8.0] — 2026-06-22
+
+### Added
+- **Re-entry after TP** — bot otomatis re-entry searah setelah posisi tutup profit
+  - Setelah TP hit, `record_tp_exit()` menyimpan konteks (arah, harga, waktu)
+  - Pada cycle berikutnya (posisi kosong), `evaluate_reentry()` dievaluasi sebelum pending order
+  - Syarat lebih ringan dari PRIMARY: tidak butuh BOS/CHoCH — cukup trend H4 + ADX + ATR + pullback H1 + candle M5/M15
+  - Window re-entry: `REENTRY_WINDOW_MINUTES` (default 90 menit)
+  - Batas re-entry per sesi tren: `REENTRY_MAX_COUNT` (default 2)
+  - Jika SL hit (bukan TP), `clear_reentry()` dipanggil — tren dianggap berbalik, re-entry dibatalkan
+  - Toggle via `REENTRY_ENABLED=true/false` di `.env`
+- `bot/trade.py`: fungsi `record_tp_exit()`, `get_reentry_context()`, `clear_reentry()`
+- `bot/signals.py`: fungsi `evaluate_reentry()`
+- `config.py`: parameter `REENTRY_ENABLED`, `REENTRY_WINDOW_MINUTES`, `REENTRY_MAX_COUNT`
+
+### Notes
+- Strategi PRIMARY, CONTINUATION, dan pending order tidak berubah
+- Re-entry hanya aktif jika PRIMARY signal tidak ditemukan (prioritas tetap PRIMARY)
+
+---
+
 ## [1.7.0] — 2026-06-22
 
 ### Added
