@@ -6,7 +6,12 @@ from bot.logger import log_console
 
 
 def get_candles(symbol: str, timeframe, count: int = 300) -> pd.DataFrame | None:
+    import time as _t
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+    if rates is None or len(rates) == 0:
+        # Retry sekali setelah 2 detik — MT5 mungkin masih load data
+        _t.sleep(2)
+        rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
     if rates is None or len(rates) == 0:
         log_console(f"[IND] No rates for {symbol} tf={timeframe}", level="WARN")
         return None

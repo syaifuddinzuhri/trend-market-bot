@@ -31,6 +31,23 @@ def connect() -> bool:
     config.TF_M15 = mt5.TIMEFRAME_M15
     config.TF_M5  = mt5.TIMEFRAME_M5
 
+    # Enable symbol agar MT5 mau load data historis
+    if not mt5.symbol_select(config.SYMBOL, True):
+        log_console(f"[MT5] symbol_select({config.SYMBOL}) gagal — coba lanjut", level="WARN")
+    else:
+        log_console(f"[MT5] Symbol {config.SYMBOL} enabled")
+
+    # Warm-up: request satu bar per timeframe agar MT5 mulai load data
+    for tf, label in [
+        (mt5.TIMEFRAME_H4, "H4"), (mt5.TIMEFRAME_H1, "H1"),
+        (mt5.TIMEFRAME_M15, "M15"), (mt5.TIMEFRAME_M5, "M5"),
+    ]:
+        rates = mt5.copy_rates_from_pos(config.SYMBOL, tf, 0, 1)
+        if rates is None or len(rates) == 0:
+            log_console(f"[MT5] Warm-up {label} belum ada data — MT5 sedang load", level="WARN")
+        else:
+            log_console(f"[MT5] Warm-up {label} OK")
+
     return True
 
 

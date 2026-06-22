@@ -5,6 +5,15 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.3] — 2026-06-22
+
+### Fixed
+- `No rates for XAUUSDm tf=XXXXX` saat bot pertama start — MT5 belum load data historis
+  - `connector.py`: tambah `mt5.symbol_select()` + warm-up request per timeframe saat connect
+  - `indicators.py`: tambah retry sekali (tunggu 2 detik) jika `copy_rates_from_pos` return kosong
+
+---
+
 ## [2.0.2] — 2026-06-22
 
 ### Added
