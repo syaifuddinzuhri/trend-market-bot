@@ -5,6 +5,13 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.1] — 2026-06-22
+
+### Changed
+- Alert manual Telegram dikirim mulai **6/8 filter** (sebelumnya 7/8)
+
+---
+
 ## [1.9.0] — 2026-06-22
 
 ### Added

@@ -30,7 +30,7 @@ _ADX_CHOCH_BONUS = 5
 # Key: (symbol, direction, passed) → epoch seconds terakhir kirim
 _alert_sent_at: dict[tuple, float] = {}
 ALERT_COOLDOWN_SECONDS = 300   # kirim ulang paling cepat 5 menit
-ALERT_MIN_FILTERS = 7          # kirim jika lolos >= N filter
+ALERT_MIN_FILTERS = 6          # kirim jika lolos >= N filter
 
 
 def _ok(v: bool) -> str:
