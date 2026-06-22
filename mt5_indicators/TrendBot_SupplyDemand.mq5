@@ -19,14 +19,10 @@ input double ImpulseBodyRatio = 0.50;  // body/range impulse minimum
 input double ImpulseBodyMult  = 1.5;   // body impulse >= N × rata-rata body base
 input int    MaxZones         = 10;    // max zona per tipe (supply & demand masing-masing)
 input bool   ShowMitigated    = true;  // tampilkan zona yang sudah ditembus (lebih gelap)
-input color  DemandColor      = C'0,12,0';    // fill hijau gelap
-input color  SupplyColor      = C'12,0,0';    // fill merah gelap
-input color  DemandColorUsed  = C'0,5,0';     // fill hijau sangat gelap (mitigated)
-input color  SupplyColorUsed  = C'5,0,0';     // fill merah sangat gelap (mitigated)
-input color  DemandBorder     = C'0,200,0';   // border hijau
-input color  SupplyBorder     = C'220,0,0';   // border merah
-input color  DemandBorderUsed = C'0,100,0';   // border hijau redup (mitigated)
-input color  SupplyBorderUsed = C'120,0,0';   // border merah redup (mitigated)
+input color  DemandColor      = C'0,60,0';    // hijau (fresh demand)
+input color  SupplyColor      = C'60,0,0';    // merah (fresh supply)
+input color  DemandColorUsed  = C'0,25,0';    // hijau redup (demand mitigated)
+input color  SupplyColorUsed  = C'25,0,0';    // merah redup (supply mitigated)
 input ENUM_LINE_STYLE BorderStyle = STYLE_SOLID;
 
 #define PREFIX "TBot_SD_"
@@ -210,34 +206,31 @@ void _DrawAllZones(const datetime &time[])
 
 void _DrawZone(SDZone &z)
 {
-   color fill, border;
+   color col;
    string label;
 
    if (z.is_demand)
    {
-      fill   = z.mitigated ? DemandColorUsed : DemandColor;
-      border = z.mitigated ? DemandBorderUsed : DemandBorder;
-      label  = z.mitigated ? "Demand (used)" : "Demand";
+      col   = z.mitigated ? DemandColorUsed : DemandColor;
+      label = z.mitigated ? "Demand (used)" : "Demand";
    }
    else
    {
-      fill   = z.mitigated ? SupplyColorUsed : SupplyColor;
-      border = z.mitigated ? SupplyBorderUsed : SupplyBorder;
-      label  = z.mitigated ? "Supply (used)" : "Supply";
+      col   = z.mitigated ? SupplyColorUsed : SupplyColor;
+      label = z.mitigated ? "Supply (used)" : "Supply";
    }
 
    datetime t_end = TimeCurrent() + 86400 * 30;
 
-   // Kotak
+   // Kotak — OBJPROP_COLOR adalah satu-satunya warna yang efektif untuk fill+border
    string rect = z.name + "_rect";
    if (ObjectFind(0, rect) < 0)
       ObjectCreate(0, rect, OBJ_RECTANGLE, 0, z.time_start, z.top, t_end, z.bottom);
-   ObjectSetInteger(0, rect, OBJPROP_COLOR,      border);
+   ObjectSetInteger(0, rect, OBJPROP_COLOR,      col);
    ObjectSetInteger(0, rect, OBJPROP_STYLE,      BorderStyle);
    ObjectSetInteger(0, rect, OBJPROP_WIDTH,      1);
    ObjectSetInteger(0, rect, OBJPROP_FILL,       true);
    ObjectSetInteger(0, rect, OBJPROP_BACK,       true);
-   ObjectSetInteger(0, rect, OBJPROP_BGCOLOR,    fill);
    ObjectSetInteger(0, rect, OBJPROP_HIDDEN,     true);
    ObjectSetInteger(0, rect, OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0, rect, OBJPROP_TIME,  0, z.time_start);
@@ -253,7 +246,7 @@ void _DrawZone(SDZone &z)
    if (ObjectFind(0, lbl) < 0)
       ObjectCreate(0, lbl, OBJ_TEXT, 0, z.time_start, z.top);
    ObjectSetString(0,  lbl, OBJPROP_TEXT,      " " + label);
-   ObjectSetInteger(0, lbl, OBJPROP_COLOR,     border);
+   ObjectSetInteger(0, lbl, OBJPROP_COLOR,     col);
    ObjectSetInteger(0, lbl, OBJPROP_FONTSIZE,  8);
    ObjectSetString(0,  lbl, OBJPROP_FONT,      "Arial Bold");
    ObjectSetInteger(0, lbl, OBJPROP_SELECTABLE,false);
@@ -283,13 +276,11 @@ void _CheckMitigation(double current_price)
       }
       else
       {
-         color fill   = zones[z].is_demand ? DemandColorUsed : SupplyColorUsed;
-         color border = zones[z].is_demand ? DemandBorderUsed : SupplyBorderUsed;
+         color col   = zones[z].is_demand ? DemandColorUsed : SupplyColorUsed;
          string label = zones[z].is_demand ? "Demand (used)" : "Supply (used)";
-         ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_BGCOLOR, fill);
-         ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_COLOR,   border);
-         ObjectSetString(0,  zones[z].name + "_lbl",  OBJPROP_TEXT,    " " + label);
-         ObjectSetInteger(0, zones[z].name + "_lbl",  OBJPROP_COLOR,   border);
+         ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_COLOR, col);
+         ObjectSetString(0,  zones[z].name + "_lbl",  OBJPROP_TEXT,  " " + label);
+         ObjectSetInteger(0, zones[z].name + "_lbl",  OBJPROP_COLOR, col);
       }
    }
 }
