@@ -2,14 +2,7 @@
 Signal aggregator — dua jenis signal:
 
 PRIMARY       : setup lengkap multi-TF (BOS/CHoCH + pullback H1 + candle M15)
-                → dipakai untuk entry pertama di sesi
-
-CONTINUATION  : setup mid-session untuk re-entry tambahan
-                → EMA_RETEST  : pullback ke EMA20 M15 setelah BOS
-                → HLC         : Higher Low / Lower High baru di H1 + candle M15
-
-Kedua jenis signal menggunakan filter H4 trend, ADX, ATR, dan session yang sama.
-Perbedaan: CONTINUATION tidak wajib lewat pullback H1 ke EMA (karena sudah di area tren).
+CONTINUATION  : mid-session re-entry (EMA_RETEST atau HLC)
 """
 import pandas as pd
 import config
@@ -31,47 +24,126 @@ from bot.session import is_trading_session
 from bot.news_filter import is_news_lock
 from bot.logger import log_console
 
-_ADX_CHOCH_BONUS = 5   # ADX threshold lebih tinggi untuk CHoCH
+_ADX_CHOCH_BONUS = 5
+
+
+def _ok(v: bool) -> str:
+    return "✅" if v else "❌"
+
+
+def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame):
+    """
+    Cetak status semua filter setiap cycle — membantu entry manual di akun lain.
+
+    Format:
+    [SCAN] BULLISH | Session✅ News✅ | ADX=28.3✅ ATR=21.5✅ | Pullback✅ | BOS=BULLISH_BOS✅ | Candle=ENGULFING✅ → 🟢 SIAP ENTRY
+    [SCAN] BULLISH | Session✅ News✅ | ADX=28.3✅ ATR=19.9❌ | Pullback✅ | BOS=NO_STRUCTURE❌ | Candle=NO_PATTERN❌ → ⏳ 2/6 filter
+    """
+    session_ok = is_trading_session()
+    news_ok    = not is_news_lock()
+
+    # H4 trend
+    trend = get_trend(df_h4)
+    trend_ok = trend != NO_TRADE
+    direction = "BUY" if trend == TREND_BULLISH else ("SELL" if trend == TREND_BEARISH else "—")
+
+    # H1 filters
+    last_h1    = df_h1.iloc[-1]
+    adx_val    = last_h1["adx"]
+    atr_val    = last_h1["atr"]
+    atr_ma_val = last_h1.get("atr_ma", 0)
+    adx_ok     = adx_val >= config.ADX_MIN
+    atr_ok     = (not pd.isna(atr_ma_val)) and (atr_val > atr_ma_val)
+    pullback_ok = has_pullback(df_h1, trend) if trend_ok else False
+
+    # M15 structure & candle
+    structure   = get_market_structure(df_m15)
+    struct_ok   = (
+        (direction == "BUY"  and is_bullish_structure(structure)) or
+        (direction == "SELL" and is_bearish_structure(structure))
+    ) if trend_ok else False
+
+    pattern   = check_pattern(df_m15)
+    bull_pat  = pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}
+    bear_pat  = pattern in {BEARISH_PIN_BAR, BEARISH_ENGULFING}
+    candle_ok = (direction == "BUY" and bull_pat) or (direction == "SELL" and bear_pat) if trend_ok else False
+
+    filters = [session_ok, news_ok, trend_ok, adx_ok, atr_ok, pullback_ok, struct_ok, candle_ok]
+    passed  = sum(filters)
+    total   = len(filters)
+    all_ok  = all(filters)
+
+    # Simbol struktur pendek
+    struct_short = {
+        "BULLISH_BOS":   "BOS↑", "BEARISH_BOS":   "BOS↓",
+        "BULLISH_CHOCH": "CHoCH↑", "BEARISH_CHOCH": "CHoCH↓",
+    }.get(structure, structure[:8] if structure else "—")
+
+    candle_short = {
+        BULLISH_PIN_BAR: "PinBar↑", BULLISH_ENGULFING: "Engulf↑",
+        BEARISH_PIN_BAR: "PinBar↓", BEARISH_ENGULFING: "Engulf↓",
+    }.get(pattern, "—")
+
+    if all_ok:
+        status = "🟢 SIAP ENTRY"
+    elif passed >= 6:
+        status = f"🔥 HAMPIR ({passed}/{total})"
+    elif passed >= 4:
+        status = f"⏳ DEKAT ({passed}/{total})"
+    else:
+        status = f"💤 TUNGGU ({passed}/{total})"
+
+    log_console(
+        f"[SCAN] {direction} | "
+        f"Session{_ok(session_ok)} News{_ok(news_ok)} | "
+        f"Trend{_ok(trend_ok)} | "
+        f"ADX={adx_val:.1f}{_ok(adx_ok)} "
+        f"ATR={atr_val:.2f}{_ok(atr_ok)} | "
+        f"Pullback{_ok(pullback_ok)} | "
+        f"Struct={struct_short}{_ok(struct_ok)} | "
+        f"Candle={candle_short}{_ok(candle_ok)} → {status}"
+    )
+
+    # Jika hampir entry, cetak detail tambahan untuk bantu manual entry
+    if passed >= 6 and not all_ok:
+        missing = []
+        if not struct_ok:  missing.append(f"Tunggu {direction} structure di M15")
+        if not candle_ok:  missing.append(f"Tunggu candle konfirmasi ({direction})")
+        if not pullback_ok: missing.append(f"Tunggu pullback ke EMA20/50 H1")
+        if not atr_ok:     missing.append(f"Tunggu ATR naik (skrg {atr_val:.2f} < MA {atr_ma_val:.2f})")
+        if not adx_ok:     missing.append(f"Tunggu ADX naik (skrg {adx_val:.1f} < {config.ADX_MIN})")
+        for m in missing:
+            log_console(f"[SCAN]   ↳ {m}")
+
+    return all_ok
 
 
 def _base_filters(df_h4: pd.DataFrame, df_h1: pd.DataFrame) -> tuple[str | None, str, float, float]:
-    """
-    Filter bersama H4 + H1.
-    Returns (direction, trend, adx_val, atr_val) atau (None, ...) jika gagal.
-    """
     if not is_trading_session():
-        log_console("[SIG] Outside trading session — skip")
         return None, "", 0, 0
-
     if is_news_lock():
-        log_console("[SIG] NEWS_LOCK active — skip")
         return None, "", 0, 0
 
     trend = get_trend(df_h4)
     if trend == NO_TRADE:
-        log_console("[SIG] No clear H4 trend — skip")
         return None, "", 0, 0
 
     direction = "BUY" if trend == TREND_BULLISH else "SELL"
 
-    last_h1 = df_h1.iloc[-1]
+    last_h1    = df_h1.iloc[-1]
     adx_val    = last_h1["adx"]
     atr_val    = last_h1["atr"]
     atr_ma_val = last_h1["atr_ma"]
 
     if adx_val < config.ADX_SKIP:
-        log_console(f"[SIG] ADX terlalu rendah ({adx_val:.1f}) — skip")
         return None, trend, adx_val, atr_val
-
     if pd.isna(atr_ma_val) or atr_val <= atr_ma_val:
-        log_console(f"[SIG] ATR ({atr_val:.4f}) <= ATR_MA ({atr_ma_val:.4f}) — skip")
         return None, trend, adx_val, atr_val
 
     return direction, trend, adx_val, atr_val
 
 
 def _candle_ok(df_m15: pd.DataFrame, direction: str) -> str | None:
-    """Cek pola candle M15. Return nama pattern atau None."""
     pattern = check_pattern(df_m15)
     if direction == "BUY" and pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}:
         return pattern
@@ -80,40 +152,27 @@ def _candle_ok(df_m15: pd.DataFrame, direction: str) -> str | None:
     return None
 
 
-# ── Signal PRIMARY ────────────────────────────────────────────────
-
 def evaluate(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame) -> dict | None:
-    """
-    Setup PRIMARY: filter lengkap multi-TF.
-    Dipakai untuk entry pertama di sesi (posisi induk = 0).
-    """
     direction, trend, adx_val, atr_val = _base_filters(df_h4, df_h1)
     if direction is None:
         return None
 
-    # Structure M15
     structure = get_market_structure(df_m15)
     if direction == "BUY" and not is_bullish_structure(structure):
-        log_console(f"[SIG] No bullish M15 structure ({structure}) — skip")
         return None
     if direction == "SELL" and not is_bearish_structure(structure):
-        log_console(f"[SIG] No bearish M15 structure ({structure}) — skip")
         return None
 
     strength = structure_strength(structure)
     adx_threshold = config.ADX_MIN + (_ADX_CHOCH_BONUS if strength == "MODERATE" else 0)
     if adx_val < adx_threshold:
-        log_console(f"[SIG] ADX {adx_val:.1f} < {adx_threshold} ({structure}) — skip")
         return None
 
-    # Pullback H1 wajib untuk PRIMARY
     if not has_pullback(df_h1, trend):
-        log_console(f"[SIG] No {trend} pullback H1 — skip")
         return None
 
     pattern = _candle_ok(df_m15, direction)
     if not pattern:
-        log_console(f"[SIG] No {direction} candle pattern — skip")
         return None
 
     log_console(
@@ -132,83 +191,43 @@ def evaluate(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame) -> 
     }
 
 
-# ── Signal CONTINUATION ───────────────────────────────────────────
-
 def evaluate_continuation(
     df_h4: pd.DataFrame,
     df_h1: pd.DataFrame,
     df_m15: pd.DataFrame,
     existing_direction: str,
 ) -> dict | None:
-    """
-    Setup CONTINUATION: mid-session re-entry.
-
-    Dua sub-tipe:
-      EMA_RETEST  — pullback ke EMA20 M15 setelah BOS terkonfirmasi
-      HLC         — Higher Low / Lower High baru di H1 + candle M15
-
-    existing_direction: arah posisi yang sudah terbuka ('BUY'/'SELL')
-    Hanya boleh entry ke arah yang SAMA dengan posisi yang ada.
-    """
     direction, trend, adx_val, atr_val = _base_filters(df_h4, df_h1)
     if direction is None:
         return None
-
-    # Harus searah dengan posisi yang ada
     if direction != existing_direction:
-        log_console(f"[CONT] Arah berbeda ({direction} vs existing {existing_direction}) — skip")
         return None
-
-    # ADX minimal sama untuk continuation
     if adx_val < config.ADX_MIN:
-        log_console(f"[CONT] ADX {adx_val:.1f} < {config.ADX_MIN} — skip")
         return None
 
     pattern = _candle_ok(df_m15, direction)
     if not pattern:
-        log_console(f"[CONT] No {direction} candle pattern M15 — skip")
         return None
 
-    # ── Sub-tipe 1: EMA Retest M15 ───────────────────────────────
     if has_ema_retest_m15(df_m15, direction):
-        log_console(
-            f"[CONT] ✅ EMA_RETEST | {direction} | ADX={adx_val:.1f} | pattern={pattern}"
-        )
+        log_console(f"[CONT] ✅ EMA_RETEST | {direction} | ADX={adx_val:.1f} | pattern={pattern}")
         return {
-            "signal_type":        "EMA_RETEST",
-            "direction":          direction,
-            "trend":              trend,
-            "structure":          "EMA_RETEST_M15",
-            "structure_strength": "MODERATE",
-            "adx":                adx_val,
-            "atr":                atr_val,
-            "pattern":            pattern,
+            "signal_type": "EMA_RETEST", "direction": direction, "trend": trend,
+            "structure": "EMA_RETEST_M15", "structure_strength": "MODERATE",
+            "adx": adx_val, "atr": atr_val, "pattern": pattern,
         }
 
-    # ── Sub-tipe 2: HLC Continuation ─────────────────────────────
     if has_hlc_continuation(df_h1, direction):
-        # Tetap butuh struktur M15 minimal (CHoCH cukup)
         structure = get_market_structure(df_m15)
         if direction == "BUY" and not is_bullish_structure(structure):
-            log_console(f"[CONT] HLC tapi no bullish M15 structure — skip")
             return None
         if direction == "SELL" and not is_bearish_structure(structure):
-            log_console(f"[CONT] HLC tapi no bearish M15 structure — skip")
             return None
-
-        log_console(
-            f"[CONT] ✅ HLC | {direction} | {structure} | ADX={adx_val:.1f} | pattern={pattern}"
-        )
+        log_console(f"[CONT] ✅ HLC | {direction} | {structure} | ADX={adx_val:.1f} | pattern={pattern}")
         return {
-            "signal_type":        "HLC",
-            "direction":          direction,
-            "trend":              trend,
-            "structure":          structure,
-            "structure_strength": "MODERATE",
-            "adx":                adx_val,
-            "atr":                atr_val,
-            "pattern":            pattern,
+            "signal_type": "HLC", "direction": direction, "trend": trend,
+            "structure": structure, "structure_strength": "MODERATE",
+            "adx": adx_val, "atr": atr_val, "pattern": pattern,
         }
 
-    log_console(f"[CONT] No continuation setup found — skip")
     return None

@@ -5,6 +5,16 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.2] — 2026-06-22
+
+### Added
+- **Scan log real-time** — `bot/signals.py` kini memiliki fungsi `scan_log()` yang dipanggil setiap signal cycle (15 detik) dari `main.py`
+- Format log: `[SCAN] BUY | Session✅ News✅ | Trend✅ | ADX=28.3✅ ATR=21.5✅ | Pullback✅ | Struct=BOS↑✅ | Candle=Engulf↑✅ → 🟢 SIAP ENTRY`
+- Status level: 🟢 SIAP ENTRY / 🔥 HAMPIR (6-7/8) / ⏳ DEKAT (4-5/8) / 💤 TUNGGU (<4/8)
+- Ketika 6+ filter lolos, cetak hint spesifik filter mana yang belum terpenuhi (membantu entry manual di akun lain)
+
+---
+
 ## [1.3.1] — 2026-06-20
 
 ### Fixed

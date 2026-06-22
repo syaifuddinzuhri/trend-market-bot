@@ -10,7 +10,8 @@ from datetime import datetime, date as _date, timedelta
 import MetaTrader5 as mt5
 
 import config
-from bot import connector, signals, trade, telegram
+from bot import connector, trade, telegram
+from bot import signals
 from bot.indicators import get_h4, get_h1, get_m15
 from bot.risk import get_lot_size, calc_sl
 from bot.logger import log_console, log_trade
@@ -231,6 +232,9 @@ def _run_signal_cycle():
     if df_h4 is None or df_h1 is None or df_m15 is None:
         log_console("[BOT] Gagal ambil data candle", level="WARN")
         return
+
+    # ── Tampilkan status semua filter (untuk monitoring & manual entry) ──
+    signals.scan_log(df_h4, df_h1, df_m15)
 
     # ── Kelola posisi terbuka (TP1/TP2/Trail/Pyramid) ────────────
     trade.manage_open_positions(config.SYMBOL, df_h1=df_h1)
