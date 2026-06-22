@@ -5,6 +5,13 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.5] — 2026-06-22
+
+### Fixed
+- TP1/TP2 di alert manual salah (terlalu kecil) — pip_size dihitung dari `point * 10` tanpa floor, untuk XAUUSDm (point=0.001) hasilnya 0.01 bukan 0.1. Sekarang pakai `max(point * 10, 0.1)`
+
+---
+
 ## [1.9.4] — 2026-06-22
 
 ### Fixed

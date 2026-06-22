@@ -162,7 +162,10 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
                 entry_price = tick.ask if direction == "BUY" else tick.bid
                 sl_price, sl_dist = calc_sl(df_h1, direction, entry_price)
                 sym_info = mt5.symbol_info(config.SYMBOL)
-                pip_size = (sym_info.point * 10) if sym_info else 0.1
+                # pip_size: untuk XAUUSD point=0.01 → pip=0.1, untuk XAUUSDm point=0.001 → pip=0.01
+                # Normalkan ke 1 pip = 10 point, minimal 0.1
+                raw_point = sym_info.point if sym_info else 0.01
+                pip_size = max(raw_point * 10, 0.1)
                 if config.TP_MODE == "pips":
                     tp1_price = entry_price + config.TP1_PIPS * pip_size if direction == "BUY" else entry_price - config.TP1_PIPS * pip_size
                     tp2_price = entry_price + config.TP2_PIPS * pip_size if direction == "BUY" else entry_price - config.TP2_PIPS * pip_size
