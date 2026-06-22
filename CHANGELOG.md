@@ -5,6 +5,14 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.2] — 2026-06-22
+
+### Fixed
+- Alert manual Telegram tidak pernah terkirim — `telegram` module tidak diimport di `bot/signals.py`
+- Cooldown `_alert_sent_at` sekarang hanya di-set setelah notif berhasil terkirim (sebelumnya di-set dulu sehingga cooldown jalan meski kirim gagal)
+
+---
+
 ## [1.9.1] — 2026-06-22
 
 ### Changed

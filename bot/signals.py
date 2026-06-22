@@ -23,6 +23,7 @@ from bot.candlestick import (
 from bot.session import is_trading_session
 from bot.news_filter import is_news_lock
 from bot.logger import log_console
+from bot import telegram
 
 _ADX_CHOCH_BONUS = 5
 
@@ -156,12 +157,10 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
         now = _t.time()
         last = _alert_sent_at.get(key, 0)
         if now - last >= ALERT_COOLDOWN_SECONDS:
-            _alert_sent_at[key] = now
-            # Ambil proyeksi entry/SL/TP dari tick terbaru
             try:
+                from bot.risk import calc_sl
                 tick = mt5.symbol_info_tick(config.SYMBOL)
                 entry_price = tick.ask if direction == "BUY" else tick.bid
-                from bot.risk import calc_sl
                 sl_price, sl_dist = calc_sl(df_h1, direction, entry_price)
                 sym_info = mt5.symbol_info(config.SYMBOL)
                 pip_size = (sym_info.point * 10) if sym_info else 0.1
@@ -171,26 +170,26 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
                 else:
                     tp1_price = entry_price + sl_dist * config.TP1_R if direction == "BUY" else entry_price - sl_dist * config.TP1_R
                     tp2_price = entry_price + sl_dist * config.TP2_R if direction == "BUY" else entry_price - sl_dist * config.TP2_R
-            except Exception:
-                sl_price = tp1_price = tp2_price = entry_price = 0.0
-
-            telegram.notify_alert_manual(
-                direction=direction,
-                symbol=config.SYMBOL,
-                passed=passed,
-                total=total,
-                adx=adx_val,
-                atr_val=atr_val,
-                atr_ma=atr_ma_val,
-                struct_short=struct_short,
-                candle_short=candle_short,
-                entry=entry_price,
-                sl=sl_price,
-                tp1=tp1_price,
-                tp2=tp2_price,
-                missing=missing,
-            )
-            log_console(f"[SCAN] ⚡ Alert manual dikirim ke Telegram ({passed}/{total})")
+                telegram.notify_alert_manual(
+                    direction=direction,
+                    symbol=config.SYMBOL,
+                    passed=passed,
+                    total=total,
+                    adx=adx_val,
+                    atr_val=atr_val,
+                    atr_ma=atr_ma_val,
+                    struct_short=struct_short,
+                    candle_short=candle_short,
+                    entry=entry_price,
+                    sl=sl_price,
+                    tp1=tp1_price,
+                    tp2=tp2_price,
+                    missing=missing,
+                )
+                _alert_sent_at[key] = now
+                log_console(f"[SCAN] ⚡ Alert manual dikirim ke Telegram ({passed}/{total})")
+            except Exception as e:
+                log_console(f"[SCAN] Alert gagal dikirim: {e}", level="WARN")
 
     return all_ok
 
