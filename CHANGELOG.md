@@ -5,6 +5,18 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.8] — 2026-06-22
+
+### Added
+- Analisa market Telegram setiap **5 menit** (sebelumnya 30 menit) dengan narasi lengkap:
+  - Trend H4, gerakan saat ini (pullback/continuation), struktur M15
+  - Key levels: EMA20/EMA50 H1, range High-Low M15 (20 bar)
+  - Status filter lolos (N/8)
+  - **Rekomendasi** teks: TUNGGU / SIAP ENTRY / MONITOR + zona entry, SL, TP1, TP2
+  - Status posisi aktif: entry, harga sekarang, PnL, jarak ke SL & TP1
+
+---
+
 ## [2.0.7] — 2026-06-22
 
 ### Fixed

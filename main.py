@@ -21,7 +21,7 @@ from bot.calendar import refresh as calendar_refresh
 
 HEARTBEAT_INTERVAL    = 5      # detik antara console status
 SIGNAL_CHECK_INTERVAL = 5      # detik antara full signal check (M5 butuh respons cepat)
-ANALYSIS_INTERVAL     = 1800   # detik antara analisa Telegram (30 menit)
+ANALYSIS_INTERVAL     = 300    # detik antara analisa Telegram (5 menit)
 
 # Ticket yang dibuka bot session ini
 _open_tickets: set[int] = set()
@@ -254,18 +254,8 @@ def _send_analysis(df_h4, df_h1, df_m15, df_m5=None):
                 "pnl":       pos.profit,
             })
 
-        telegram.notify_analysis(
-            symbol=config.SYMBOL,
-            direction=data["direction"],
-            trend_label=data["direction"],
-            adx=data["adx"],
-            atr=data["atr"],
-            structure=data["structure"],
-            passed=data["passed"],
-            total=data["total"],
-            positions=positions,
-            currency=config.ACCOUNT_CURRENCY,
-        )
+        data["symbol"] = config.SYMBOL
+        telegram.notify_analysis(data, positions, currency=config.ACCOUNT_CURRENCY)
         log_console("[BOT] Analisa dikirim ke Telegram")
     except Exception as e:
         log_console(f"[BOT] Gagal kirim analisa: {e}", level="WARN")

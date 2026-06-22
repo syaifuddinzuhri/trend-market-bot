@@ -199,45 +199,142 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
 def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
     """
     Kumpulkan data analisa market untuk dikirim ke Telegram.
-    Return dict berisi semua info yang dibutuhkan notify_analysis().
+    Return dict lengkap termasuk narasi kondisi & rekomendasi.
     """
-    session_ok = is_trading_session()
-    news_ok    = not is_news_lock()
-    trend      = get_trend(df_h4)
-    trend_ok   = trend != NO_TRADE
-    direction  = "BUY" if trend == TREND_BULLISH else ("SELL" if trend == TREND_BEARISH else "—")
+    import MetaTrader5 as mt5
 
-    last_h1    = df_h1.iloc[-1]
-    adx_val    = last_h1["adx"]
-    atr_val    = last_h1["atr"]
-    atr_ma_val = last_h1.get("atr_ma", 0)
-    adx_ok     = adx_val >= config.ADX_MIN
-    atr_ok     = (not pd.isna(atr_ma_val)) and (atr_val >= atr_ma_val * config.ATR_MA_RATIO)
+    session_ok  = is_trading_session()
+    news_ok     = not is_news_lock()
+    trend       = get_trend(df_h4)
+    trend_ok    = trend != NO_TRADE
+    direction   = "BUY" if trend == TREND_BULLISH else ("SELL" if trend == TREND_BEARISH else "—")
+
+    last_h4     = df_h4.iloc[-1]
+    last_h1     = df_h1.iloc[-1]
+    last_m15    = df_m15.iloc[-1]
+
+    adx_val     = last_h1["adx"]
+    atr_val     = last_h1["atr"]
+    atr_ma_val  = last_h1.get("atr_ma", 0)
+    adx_ok      = adx_val >= config.ADX_MIN
+    atr_ok      = (not pd.isna(atr_ma_val)) and (atr_val >= atr_ma_val * config.ATR_MA_RATIO)
     pullback_ok = has_pullback(df_h1, trend) if trend_ok else False
 
-    structure  = get_market_structure(df_m15)
-    struct_ok  = (
+    structure   = get_market_structure(df_m15)
+    struct_ok   = (
         (direction == "BUY"  and is_bullish_structure(structure)) or
         (direction == "SELL" and is_bearish_structure(structure))
     ) if trend_ok else False
 
-    entry_df  = df_m5 if df_m5 is not None else df_m15
-    pattern   = check_pattern(entry_df)
-    bull_pat  = pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}
-    bear_pat  = pattern in {BEARISH_PIN_BAR, BEARISH_ENGULFING}
-    candle_ok = (direction == "BUY" and bull_pat) or (direction == "SELL" and bear_pat) if trend_ok else False
+    entry_df    = df_m5 if df_m5 is not None else df_m15
+    pattern     = check_pattern(entry_df)
+    bull_pat    = pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}
+    bear_pat    = pattern in {BEARISH_PIN_BAR, BEARISH_ENGULFING}
+    candle_ok   = (direction == "BUY" and bull_pat) or (direction == "SELL" and bear_pat) if trend_ok else False
 
     filters = [session_ok, news_ok, trend_ok, adx_ok, atr_ok, pullback_ok, struct_ok, candle_ok]
     passed  = sum(filters)
     total   = len(filters)
 
+    # ── Key levels ──────────────────────────────────────────────────
+    ema20_h1  = last_h1.get("ema20", 0)
+    ema50_h1  = last_h1.get("ema50", 0)
+    ema200_h4 = last_h4.get("ema200", 0)
+    close_m15 = last_m15["close"]
+    high_m15  = df_m15["high"].tail(20).max()
+    low_m15   = df_m15["low"].tail(20).min()
+
+    # Harga sekarang
+    tick = mt5.symbol_info_tick(config.SYMBOL)
+    current_price = tick.bid if tick else close_m15
+
+    # ── Deteksi kondisi sekarang ─────────────────────────────────────
+    # Gerakan harga vs EMA50 H1 — apakah sedang pullback atau continuation
+    if direction == "SELL":
+        is_pullback_now = current_price > ema50_h1
+        move_label = "Pullback naik (retracement)" if is_pullback_now else "Lanjut turun"
+    elif direction == "BUY":
+        is_pullback_now = current_price < ema50_h1
+        move_label = "Pullback turun (retracement)" if is_pullback_now else "Lanjut naik"
+    else:
+        move_label = "Ranging / tidak jelas"
+        is_pullback_now = False
+
+    # ── Rekomendasi ──────────────────────────────────────────────────
+    sym_info = mt5.symbol_info(config.SYMBOL)
+    pip_size = max(sym_info.point * 10, 0.1) if sym_info else 0.1
+
+    if not trend_ok:
+        recommendation = "⏸ TUNGGU — Trend H4 belum jelas (EMA50 vs EMA200 belum silang)"
+        entry_zone = ""
+        sl_level = ""
+        tp1_level = ""
+        tp2_level = ""
+    elif passed >= 7:
+        arrow = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+        recommendation = f"✅ SIAP ENTRY {arrow} — semua filter hampir penuh ({passed}/{total})"
+        if direction == "SELL":
+            entry_zone = f"{current_price:.2f}"
+            sl_level   = f"{current_price + config.MAX_SL_POINTS * pip_size:.2f}"
+            tp1_level  = f"{current_price - config.TP1_PIPS * pip_size:.2f}"
+            tp2_level  = f"{current_price - config.TP2_PIPS * pip_size:.2f}"
+        else:
+            entry_zone = f"{current_price:.2f}"
+            sl_level   = f"{current_price - config.MAX_SL_POINTS * pip_size:.2f}"
+            tp1_level  = f"{current_price + config.TP1_PIPS * pip_size:.2f}"
+            tp2_level  = f"{current_price + config.TP2_PIPS * pip_size:.2f}"
+    elif is_pullback_now and direction == "SELL":
+        target = max(ema20_h1, ema50_h1)
+        recommendation = (
+            f"⏳ TUNGGU SELL — sedang pullback naik\n"
+            f"   Jika harga naik ke {target:.2f}–{target + atr_val * 0.5:.2f} lalu rejection → SELL"
+        )
+        entry_zone = f"{target:.2f}–{target + atr_val * 0.5:.2f}"
+        sl_level   = f"{target + config.MAX_SL_POINTS * pip_size:.2f}"
+        tp1_level  = f"{target - config.TP1_PIPS * pip_size:.2f}"
+        tp2_level  = f"{target - config.TP2_PIPS * pip_size:.2f}"
+    elif is_pullback_now and direction == "BUY":
+        target = min(ema20_h1, ema50_h1)
+        recommendation = (
+            f"⏳ TUNGGU BUY — sedang pullback turun\n"
+            f"   Jika harga turun ke {target - atr_val * 0.5:.2f}–{target:.2f} lalu bounce → BUY"
+        )
+        entry_zone = f"{target - atr_val * 0.5:.2f}–{target:.2f}"
+        sl_level   = f"{target - config.MAX_SL_POINTS * pip_size:.2f}"
+        tp1_level  = f"{target + config.TP1_PIPS * pip_size:.2f}"
+        tp2_level  = f"{target + config.TP2_PIPS * pip_size:.2f}"
+    else:
+        recommendation = f"👀 MONITOR — trend {direction} tapi filter belum cukup ({passed}/{total})"
+        entry_zone = ""
+        sl_level = ""
+        tp1_level = ""
+        tp2_level = ""
+
     return {
-        "direction": direction,
-        "adx":       adx_val,
-        "atr":       atr_val,
-        "structure": structure,
-        "passed":    passed,
-        "total":     total,
+        "direction":       direction,
+        "adx":             adx_val,
+        "atr":             atr_val,
+        "atr_ma":          atr_ma_val,
+        "structure":       structure,
+        "passed":          passed,
+        "total":           total,
+        "current_price":   current_price,
+        "ema20_h1":        ema20_h1,
+        "ema50_h1":        ema50_h1,
+        "ema200_h4":       ema200_h4,
+        "high_m15":        high_m15,
+        "low_m15":         low_m15,
+        "move_label":      move_label,
+        "recommendation":  recommendation,
+        "entry_zone":      entry_zone,
+        "sl_level":        sl_level,
+        "tp1_level":       tp1_level,
+        "tp2_level":       tp2_level,
+        "pullback_ok":     pullback_ok,
+        "adx_ok":          adx_ok,
+        "atr_ok":          atr_ok,
+        "session_ok":      session_ok,
+        "news_ok":         news_ok,
     }
 
 

@@ -97,57 +97,79 @@ def notify_pyramid(direction: str, symbol: str, entry: float, sl: float, tp1: fl
     send(msg)
 
 
-def notify_analysis(
-    symbol: str,
-    direction: str,
-    trend_label: str,
-    adx: float,
-    atr: float,
-    structure: str,
-    passed: int,
-    total: int,
-    positions: list,
-    currency: str = "IDR",
-):
+def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
     """
-    Kirim analisa market ke Telegram setiap 30 menit.
+    Kirim analisa market lengkap ke Telegram setiap 5 menit.
+    data = dict dari signals.build_analysis()
     positions = list of dict: {direction, entry, sl, tp1, tp2, current, pnl, lot}
     """
-    arrow = "🟢 BUY" if direction == "BUY" else ("🔴 SELL" if direction == "SELL" else "⚪ SIDEWAYS")
-    status_icon = "🟢" if passed == total else ("🔥" if passed >= 6 else ("⏳" if passed >= 4 else "💤"))
+    from datetime import datetime
+    symbol    = data.get("symbol", "XAUUSD")
+    direction = data.get("direction", "—")
+    passed    = data.get("passed", 0)
+    total     = data.get("total", 8)
+    adx       = data.get("adx", 0)
+    atr       = data.get("atr", 0)
+    structure = data.get("structure", "")
+    current   = data.get("current_price", 0)
+    ema20     = data.get("ema20_h1", 0)
+    ema50     = data.get("ema50_h1", 0)
+    high20    = data.get("high_m15", 0)
+    low20     = data.get("low_m15", 0)
+    move      = data.get("move_label", "")
+    rec       = data.get("recommendation", "")
+    entry_z   = data.get("entry_zone", "")
+    sl_l      = data.get("sl_level", "")
+    tp1_l     = data.get("tp1_level", "")
+    tp2_l     = data.get("tp2_level", "")
 
+    arrow = "🟢 BUY" if direction == "BUY" else ("🔴 SELL" if direction == "SELL" else "⚪ SIDEWAYS")
+    filter_icon = "🟢" if passed >= total else ("🔥" if passed >= 6 else ("⏳" if passed >= 4 else "💤"))
     struct_short = {
         "BULLISH_BOS": "BOS↑", "BEARISH_BOS": "BOS↓",
         "BULLISH_CHOCH": "CHoCH↑", "BEARISH_CHOCH": "CHoCH↓",
     }.get(structure, structure[:8] if structure else "—")
 
+    now_str = datetime.now().strftime("%H:%M")
+
     lines = [
-        f"📊 *Analisa {symbol}*",
+        f"📊 *Market Analysis — {symbol}* `{now_str}`",
         f"",
-        f"Trend    : {arrow}",
-        f"ADX      : `{adx:.1f}` | ATR : `{atr:.2f}`",
-        f"Struktur : `{struct_short}`",
-        f"Filter   : {status_icon} `{passed}/{total}`",
+        f"*Trend H4*  : {arrow}",
+        f"*Gerakan*   : {move}",
+        f"*Struktur*  : `{struct_short}` | ADX `{adx:.1f}` | ATR `{atr:.2f}`",
+        f"*Level EMA* : EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}`",
+        f"*Range M15* : High `{high20:.2f}` — Low `{low20:.2f}`",
+        f"*Filter*    : {filter_icon} `{passed}/{total}` lolos",
+        f"",
+        f"📌 *{rec}*",
     ]
 
+    if entry_z:
+        lines += [
+            f"",
+            f"*Entry zona* : `{entry_z}`",
+            f"*SL*         : `{sl_l}`",
+            f"*TP1*        : `{tp1_l}`",
+            f"*TP2*        : `{tp2_l}`",
+        ]
+
     if positions:
+        lines.append("")
         for p in positions:
-            pnl_str = f"{p['pnl']:+,.0f} {currency}"
-            pip_to_tp1 = abs(p['tp1'] - p['current'])
-            pip_to_sl  = abs(p['sl']  - p['current'])
-            pos_arrow  = "🟢" if p['pnl'] >= 0 else "🔴"
+            pnl_str    = f"{p['pnl']:+,.0f} {currency}"
+            dist_tp1   = abs(p['tp1'] - p['current'])
+            dist_sl    = abs(p['sl'] - p['current'])
+            pos_icon   = "🟢" if p['pnl'] >= 0 else "🔴"
             lines += [
-                f"",
-                f"📍 *Posisi {p['direction']} aktif* {pos_arrow}",
-                f"Entry    : `{p['entry']:.3f}`",
-                f"Sekarang : `{p['current']:.3f}` ({pnl_str})",
-                f"SL       : `{p['sl']:.3f}` ({pip_to_sl:.2f} pip buffer)",
-                f"TP1      : `{p['tp1']:.3f}` (~{pip_to_tp1:.2f} pip lagi)",
-                f"TP2      : `{p['tp2']:.3f}`",
-                f"Lot      : `{p['lot']}`",
+                f"─────────────────────",
+                f"📍 *Posisi {p['direction']}* {pos_icon} `{pnl_str}`",
+                f"Entry `{p['entry']:.2f}` → Sekarang `{p['current']:.2f}`",
+                f"SL `{p['sl']:.2f}` ({dist_sl:.1f} buffer) | TP1 `{p['tp1']:.2f}` ({dist_tp1:.1f} lagi)",
+                f"TP2 `{p['tp2']:.2f}` | Lot `{p['lot']}`",
             ]
     else:
-        lines += ["", "📭 *Tidak ada posisi terbuka*"]
+        lines += ["", "📭 Tidak ada posisi terbuka"]
 
     send("\n".join(lines))
 
