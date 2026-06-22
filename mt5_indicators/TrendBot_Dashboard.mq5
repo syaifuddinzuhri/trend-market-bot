@@ -18,8 +18,9 @@ input double ATR_SL_Mult   = 1.5;   // ATR_SL_MULTIPLIER dari .env
 input double TP1_R         = 1.0;   // TP1_R dari .env
 input double TP2_R         = 2.0;   // TP2_R dari .env
 input int    SwingLookback = 20;    // bar untuk cari swing SL
-input int    PanelX        = 15;    // posisi panel dari kanan (px)
-input int    PanelY        = 30;    // posisi panel dari atas (px)
+input int    PanelX        = 15;    // posisi panel dari kiri (px)
+input int    PanelY        = 30;    // posisi panel dari bawah (px)
+input int    LineHeight    = 20;    // jarak antar baris (px)
 
 // Handle indicator
 int h_ema20_h1, h_ema50_h1, h_ema200_h4;
@@ -272,8 +273,8 @@ void _RenderLines(string &lines[], color status_clr, int passed)
          ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
          ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
          ObjectSetInteger(0, name, OBJPROP_XDISTANCE, PanelX);
-         ObjectSetInteger(0, name, OBJPROP_YDISTANCE, PanelY + (n - 1 - i) * 16);
-         ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+         ObjectSetInteger(0, name, OBJPROP_YDISTANCE, PanelY + (n - 1 - i) * LineHeight);
+         ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
          ObjectSetString(0, name, OBJPROP_FONT, "Courier New");
          ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
          ObjectSetInteger(0, name, OBJPROP_BACK, false);
