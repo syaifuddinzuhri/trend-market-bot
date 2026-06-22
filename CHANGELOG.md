@@ -5,6 +5,13 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.3] — 2026-06-22
+
+### Fixed
+- **Spam pending order** — `has_pending_for_direction()` dan `get_pending_count()` sekarang cek langsung ke MT5 orders (bukan hanya `_pending_state` in-memory yang hilang saat restart). Mencegah bot pasang pending order duplikat setiap cycle.
+
+---
+
 ## [1.5.2] — 2026-06-22
 
 ### Fixed

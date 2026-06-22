@@ -549,21 +549,29 @@ def manage_pending_orders(symbol: str, direction_valid: str | None):
 
 
 def get_pending_count(symbol: str) -> int:
-    """Jumlah pending order bot yang aktif."""
-    mt5_orders = {o.ticket for o in (mt5.orders_get(symbol=symbol) or [])
-                  if o.magic == config.MAGIC_NUMBER}
-    # Sync: hapus yang sudah tidak ada di MT5
-    for t in list(_pending_state.keys()):
-        if t not in mt5_orders:
-            _pending_state.pop(t, None)
-    return len(_pending_state)
+    """Jumlah pending order bot yang aktif — cek langsung ke MT5."""
+    pending_types = {
+        mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_SELL_LIMIT,
+        mt5.ORDER_TYPE_BUY_STOP, mt5.ORDER_TYPE_SELL_STOP,
+    }
+    count = sum(
+        1 for o in (mt5.orders_get(symbol=symbol) or [])
+        if o.magic == config.MAGIC_NUMBER and o.type in pending_types
+    )
+    return count
 
 
 def has_pending_for_direction(symbol: str, direction: str) -> bool:
-    """Cek apakah sudah ada pending order untuk arah ini."""
-    mt5_orders = {o.ticket for o in (mt5.orders_get(symbol=symbol) or [])
-                  if o.magic == config.MAGIC_NUMBER}
-    for ticket, state in _pending_state.items():
-        if ticket in mt5_orders and state["direction"] == direction:
+    """
+    Cek apakah sudah ada pending order untuk arah ini.
+    Cek langsung ke MT5 (bukan hanya _pending_state) agar akurat meski bot restart.
+    """
+    target_type = (
+        {mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_BUY_STOP}
+        if direction == "BUY"
+        else {mt5.ORDER_TYPE_SELL_LIMIT, mt5.ORDER_TYPE_SELL_STOP}
+    )
+    for o in (mt5.orders_get(symbol=symbol) or []):
+        if o.magic == config.MAGIC_NUMBER and o.type in target_type:
             return True
     return False
