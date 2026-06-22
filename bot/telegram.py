@@ -34,10 +34,10 @@ def notify_signal(
         f"*{arrow} SIGNAL — {symbol}*"
         f"{struct_label}\n"
         f"Pattern : `{pattern}`\n"
-        f"Entry   : `{entry}`\n"
-        f"SL      : `{sl}`\n"
-        f"TP1     : `{tp1}`\n"
-        f"TP2     : `{tp2}`\n"
+        f"Entry   : `{entry:.3f}`\n"
+        f"SL      : `{sl:.3f}`\n"
+        f"TP1     : `{tp1:.3f}`\n"
+        f"TP2     : `{tp2:.3f}`\n"
         f"Lot     : `{lot}`"
     )
     send(msg)
@@ -48,7 +48,7 @@ def notify_tp(ticket: int, symbol: str, tp_level: str, price: float, pnl: float)
         f"✅ *TP HIT — {symbol}*\n"
         f"Ticket  : `{ticket}`\n"
         f"Level   : `{tp_level}`\n"
-        f"Price   : `{price}`\n"
+        f"Price   : `{price:.3f}`\n"
         f"PnL     : `{pnl:+.2f} USD`"
     )
     send(msg)
@@ -58,7 +58,7 @@ def notify_sl(ticket: int, symbol: str, price: float, pnl: float):
     msg = (
         f"❌ *SL HIT — {symbol}*\n"
         f"Ticket  : `{ticket}`\n"
-        f"Price   : `{price}`\n"
+        f"Price   : `{price:.3f}`\n"
         f"PnL     : `{pnl:+.2f} USD`"
     )
     send(msg)
@@ -74,10 +74,10 @@ def notify_continuation(signal_type: str, direction: str, symbol: str, entry: fl
     label = "EMA RETEST" if signal_type == "EMA_RETEST" else "HLC CONTINUATION"
     msg = (
         f"🔄 *{arrow} {label} — {symbol}*\n"
-        f"Entry   : `{entry}`\n"
-        f"SL      : `{sl}`\n"
-        f"TP1     : `{tp1}`\n"
-        f"TP2     : `{tp2}`\n"
+        f"Entry   : `{entry:.3f}`\n"
+        f"SL      : `{sl:.3f}`\n"
+        f"TP1     : `{tp1:.3f}`\n"
+        f"TP2     : `{tp2:.3f}`\n"
         f"Lot     : `{lot}`"
     )
     send(msg)
@@ -88,10 +88,10 @@ def notify_pyramid(direction: str, symbol: str, entry: float, sl: float, tp1: fl
     msg = (
         f"📐 *PYRAMID {arrow} — {symbol}*\n"
         f"Parent  : `#{parent_ticket}`\n"
-        f"Entry   : `{entry}`\n"
-        f"SL      : `{sl}`\n"
-        f"TP1     : `{tp1}`\n"
-        f"TP2     : `{tp2}`\n"
+        f"Entry   : `{entry:.3f}`\n"
+        f"SL      : `{sl:.3f}`\n"
+        f"TP1     : `{tp1:.3f}`\n"
+        f"TP2     : `{tp2:.3f}`\n"
         f"Lot     : `{lot}`"
     )
     send(msg)
@@ -101,7 +101,7 @@ def notify_trail_exit(ticket: int, symbol: str, price: float, pnl: float):
     msg = (
         f"🏁 *Trail Exit — {symbol}*\n"
         f"Ticket  : `{ticket}`\n"
-        f"Price   : `{price}`\n"
+        f"Price   : `{price:.3f}`\n"
         f"PnL     : `{pnl:+.2f}`"
     )
     send(msg)
