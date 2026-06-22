@@ -35,6 +35,8 @@ ADX_MIN = int(os.getenv("ADX_MIN", 25))
 ADX_SKIP = 20
 ATR_PERIOD = 14
 ATR_MA_PERIOD = 20
+# ATR filter: ATR harus >= ATR_MA × ATR_MA_RATIO (0.85 = toleransi 15% di bawah MA)
+ATR_MA_RATIO = float(os.getenv("ATR_MA_RATIO", 0.85))
 
 # ── SL: dinamis berbasis ATR H1 ───────────────────────────────────
 # SL = swing H1 ± (ATR_H1 × ATR_SL_MULTIPLIER)

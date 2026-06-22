@@ -5,6 +5,16 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.1] — 2026-06-22
+
+### Changed
+- **ATR filter dilonggarkan** — kondisi sebelumnya `ATR > ATR_MA` (ketat), sekarang `ATR >= ATR_MA × ATR_MA_RATIO`
+- Default `ATR_MA_RATIO=0.85` → ATR boleh hingga 15% di bawah MA, menangkap setup post-impulse yang sebelumnya di-skip
+- Parameter `ATR_MA_RATIO` bisa diatur via `.env` (0.0 = nonaktifkan filter, 1.0 = ketat seperti semula)
+- Log skip ATR lebih informatif: `ATR (4.15) < ATR_MA×0.85 (4.07) — skip`
+
+---
+
 ## [1.4.0] — 2026-06-22
 
 ### Added

@@ -56,7 +56,7 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
     atr_val    = last_h1["atr"]
     atr_ma_val = last_h1.get("atr_ma", 0)
     adx_ok     = adx_val >= config.ADX_MIN
-    atr_ok     = (not pd.isna(atr_ma_val)) and (atr_val > atr_ma_val)
+    atr_ok     = (not pd.isna(atr_ma_val)) and (atr_val >= atr_ma_val * config.ATR_MA_RATIO)
     pullback_ok = has_pullback(df_h1, trend) if trend_ok else False
 
     # M15 structure & candle
@@ -165,7 +165,11 @@ def _base_filters(df_h4: pd.DataFrame, df_h1: pd.DataFrame) -> tuple[str | None,
 
     if adx_val < config.ADX_SKIP:
         return None, trend, adx_val, atr_val
-    if pd.isna(atr_ma_val) or atr_val <= atr_ma_val:
+    if pd.isna(atr_ma_val) or atr_val < atr_ma_val * config.ATR_MA_RATIO:
+        log_console(
+            f"[SIG] ATR ({atr_val:.4f}) < ATR_MA×{config.ATR_MA_RATIO} "
+            f"({atr_ma_val * config.ATR_MA_RATIO:.4f}) — skip"
+        )
         return None, trend, adx_val, atr_val
 
     return direction, trend, adx_val, atr_val
