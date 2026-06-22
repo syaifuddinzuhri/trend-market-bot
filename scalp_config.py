@@ -25,7 +25,7 @@ SCALP_ENABLED         = os.getenv("SCALP_ENABLED", "true").lower() == "true"
 SCALP_GRID_COUNT      = int(os.getenv("SCALP_GRID_COUNT", 5))      # jumlah order per zona
 SCALP_LOT             = float(os.getenv("SCALP_LOT", 0.05))         # total lot dibagi grid
 SCALP_SL_PIPS         = float(os.getenv("SCALP_SL_PIPS", 8.0))     # SL dalam pip
-SCALP_TP_PIPS         = float(os.getenv("SCALP_TP_PIPS", 8.0))     # TP dalam pip (1:1)
+SCALP_TP_PIPS         = float(os.getenv("SCALP_TP_PIPS", 15.0))    # TP dalam pip (default 1:1.8)
 SCALP_EXPIRY_MINUTES  = int(os.getenv("SCALP_EXPIRY_MINUTES", 20)) # auto-cancel pending
 
 # ── Zone detection ────────────────────────────────────────────────
