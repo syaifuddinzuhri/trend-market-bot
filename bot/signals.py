@@ -289,7 +289,12 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
 
     elif passed >= 7:
         arrow_txt = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
-        recommendation = f"✅ SIAP ENTRY {arrow_txt} — {passed}/{total} filter lolos"
+        recommendation = f"✅ SIAP ENTRY {arrow_txt} — {passed}/{total} filter lolos — entry manual atau tunggu bot"
+        _levels(current_price, direction)
+
+    elif passed == 6:
+        arrow_txt = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+        recommendation = f"⚡ POTENSI ENTRY {arrow_txt} — 6/8 filter lolos, pertimbangkan entry manual"
         _levels(current_price, direction)
 
     elif is_pullback_now and direction == "SELL":
