@@ -5,6 +5,21 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.0] — 2026-06-22
+
+### Added
+- **M5 entry trigger** — timeframe M5 ditambah sebagai candle konfirmasi entry (PinBar/Engulfing), menggantikan M15 untuk trigger akhir
+- Flow baru: H4 trend → H1 pullback+ADX+ATR → M15 BOS/CHoCH struktur → **M5 candle entry**
+- `get_m5()` di `bot/indicators.py` (EMA + ATR, tanpa ADX)
+- `TF_M5` ditambah di `config.py` dan `bot/connector.py`
+- `signals.evaluate()` dan `evaluate_continuation()` terima parameter `df_m5`, fallback ke M15 jika M5 tidak tersedia
+- `scan_log()` tampilkan label `[M5]` atau `[M15]` di status candle
+
+### Changed
+- `SIGNAL_CHECK_INTERVAL` turun dari **15 detik → 5 detik** agar responsif terhadap candle M5
+
+---
+
 ## [1.3.2] — 2026-06-22
 
 ### Added
