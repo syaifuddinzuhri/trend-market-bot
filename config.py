@@ -40,7 +40,9 @@ ATR_MA_RATIO = float(os.getenv("ATR_MA_RATIO", 0.85))
 
 # ── SL: dinamis berbasis ATR H1 ───────────────────────────────────
 # SL = swing H1 ± (ATR_H1 × ATR_SL_MULTIPLIER)
-ATR_SL_MULTIPLIER = float(os.getenv("ATR_SL_MULTIPLIER", 1.5))
+ATR_SL_MULTIPLIER    = float(os.getenv("ATR_SL_MULTIPLIER", 1.5))
+MAX_SL_POINTS        = float(os.getenv("MAX_SL_POINTS", 30.0))   # 0 = tidak di-cap
+SWING_LOOKBACK_M5    = int(os.getenv("SWING_LOOKBACK_M5", 10))   # lookback swing untuk M5
 
 # ── TP 3-tier ─────────────────────────────────────────────────────
 # TP1: tutup TP1_PCT posisi saat profit mencapai TP1_R × SL-distance

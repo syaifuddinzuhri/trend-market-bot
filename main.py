@@ -99,7 +99,7 @@ def _get_parent_positions() -> list:
     ]
 
 
-def _open_trade(sig: dict, df_h1, label: str = "") -> bool:
+def _open_trade(sig: dict, df_h1, label: str = "", df_m5=None) -> bool:
     """Hitung SL/TP/lot dan buka order. Return True jika berhasil."""
     global _open_tickets
 
@@ -113,7 +113,7 @@ def _open_trade(sig: dict, df_h1, label: str = "") -> bool:
     if not _distance_ok(entry, direction, atr_h1):
         return False
 
-    sl, sl_dist = calc_sl(df_h1, direction, entry)
+    sl, sl_dist = calc_sl(df_h1, direction, entry, df_m5=df_m5)
     if sl_dist <= 0:
         log_console("[BOT] SL distance tidak valid — skip", level="WARN")
         return False
@@ -164,7 +164,7 @@ def _open_trade(sig: dict, df_h1, label: str = "") -> bool:
     return False
 
 
-def _place_pending(pend: dict, df_h1) -> bool:
+def _place_pending(pend: dict, df_h1, df_m5=None) -> bool:
     """Pasang pending limit order di level EMA H1."""
     direction = pend["direction"]
     level     = pend["level"]
@@ -186,7 +186,7 @@ def _place_pending(pend: dict, df_h1) -> bool:
         log_console(f"[PEND] Harga {current:.2f} sudah di atas level SELL LIMIT {level:.2f} — skip")
         return False
 
-    sl, sl_dist = calc_sl(df_h1, direction, level)
+    sl, sl_dist = calc_sl(df_h1, direction, level, df_m5=df_m5)
     if sl_dist <= 0:
         return False
 
@@ -310,14 +310,14 @@ def _run_signal_cycle():
         if sig:
             # Ada market signal → cancel semua pending dulu, lalu market order
             trade.manage_pending_orders(config.SYMBOL, direction_valid=None)
-            _open_trade(sig, df_h1, label="PRIMARY")
+            _open_trade(sig, df_h1, label="PRIMARY", df_m5=df_m5)
             return
 
         # Tidak ada market signal → coba pasang pending limit jika diaktifkan
         if config.PENDING_ENABLED and trade.get_pending_count(config.SYMBOL) == 0:
             pend = signals.evaluate_pending(df_h4, df_h1)
             if pend:
-                _place_pending(pend, df_h1)
+                _place_pending(pend, df_h1, df_m5=df_m5)
         return
 
     # ── KASUS 2: Ada posisi, belum capai MAX → cari CONTINUATION ─

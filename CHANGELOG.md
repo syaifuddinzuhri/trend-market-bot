@@ -5,6 +5,18 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.2] — 2026-06-22
+
+### Fixed
+- **Spam Telegram pending order** — notif Telegram pending hanya dikirim sekali saat order benar-benar terpasang di MT5, tidak dikirim ulang setiap cycle
+- **SL terlalu lebar** — tiga perbaikan sekaligus:
+  1. `ATR_SL_MULTIPLIER` diturunkan default `1.5 → 1.0`
+  2. SL dihitung dari swing **M5** (bukan H1) jika `df_m5` tersedia → jarak lebih ketat
+  3. `MAX_SL_POINTS=30.0` — cap maksimal SL distance, lindungi margin pada modal kecil
+- `SWING_LOOKBACK_M5` parameter baru untuk mengatur lookback swing M5
+
+---
+
 ## [1.5.1] — 2026-06-22
 
 ### Fixed

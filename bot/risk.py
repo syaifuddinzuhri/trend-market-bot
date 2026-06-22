@@ -71,23 +71,41 @@ def swing_stop(df, direction: str, lookback: int = None) -> float:
     return window["high"].max()
 
 
-def calc_sl(df_h1, direction: str, entry: float) -> tuple[float, float]:
+def calc_sl(df_h1, direction: str, entry: float, df_m5=None) -> tuple[float, float]:
     """
-    SL berbasis swing H1 + buffer dinamis (ATR H1 × ATR_SL_MULTIPLIER).
+    SL berbasis swing + buffer ATR.
+    Jika df_m5 tersedia → pakai swing M5 (lebih ketat).
+    Fallback ke swing H1 jika M5 tidak ada.
+    SL distance di-cap oleh MAX_SL_POINTS jika dikonfigurasi.
     Returns (sl_price, sl_distance).
     """
-    swing = swing_stop(df_h1, direction)
+    # Pilih timeframe untuk swing: M5 lebih ketat, H1 lebih aman
+    df_swing = df_m5 if df_m5 is not None else df_h1
+    tf_label  = "M5" if df_m5 is not None else "H1"
+    lookback  = config.SWING_LOOKBACK_M5 if df_m5 is not None else config.SWING_LOOKBACK
+
+    swing  = swing_stop(df_swing, direction, lookback)
     atr_h1 = df_h1.iloc[-1]["atr"]
     buffer = atr_h1 * config.ATR_SL_MULTIPLIER
 
     if direction == "BUY":
-        sl = swing - buffer
-        sl_dist = entry - sl
+        sl       = swing - buffer
+        sl_dist  = entry - sl
     else:
-        sl = swing + buffer
-        sl_dist = sl - entry
+        sl       = swing + buffer
+        sl_dist  = sl - entry
+
+    # Cap SL agar tidak melebihi MAX_SL_POINTS
+    if config.MAX_SL_POINTS > 0 and sl_dist > config.MAX_SL_POINTS:
+        sl_dist = config.MAX_SL_POINTS
+        sl = entry - sl_dist if direction == "BUY" else entry + sl_dist
+        log_console(
+            f"[RISK] SL di-cap ke MAX_SL_POINTS={config.MAX_SL_POINTS} | "
+            f"original dist={sl_dist:.2f}"
+        )
 
     log_console(
-        f"[RISK] SL={sl:.2f} | swing_H1={swing:.2f} | ATR_buf={buffer:.2f} | dist={sl_dist:.2f}"
+        f"[RISK] SL={sl:.3f} | swing_{tf_label}={swing:.3f} | "
+        f"ATR_buf={buffer:.3f} | dist={sl_dist:.3f}"
     )
     return sl, max(sl_dist, 0.0)

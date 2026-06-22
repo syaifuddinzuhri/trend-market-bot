@@ -460,12 +460,17 @@ def place_pending_order(
     }
 
     log_console(
-        f"[PEND] {direction} LIMIT | ticket={ticket} | "
-        f"level={level:.2f} | SL={sl:.2f} | TP1={tp1:.2f} | TP2={tp:.2f} | lot={lot}"
+        f"[PEND] {direction} LIMIT dipasang | ticket={ticket} | "
+        f"level={level:.3f} | SL={sl:.3f} | TP1={tp1:.3f} | TP2={tp:.3f} | lot={lot}"
     )
-    telegram.notify_signal(
-        direction, symbol, level, sl, tp1, tp, lot, f"LIMIT_{pattern}",
-        structure="PENDING", strength="",
+    # Notif Telegram hanya sekali saat order terpasang — tidak dikirim ulang setiap cycle
+    telegram.send(
+        f"⏳ *PENDING {direction} — {symbol}*\n"
+        f"Level : `{level:.3f}`\n"
+        f"SL    : `{sl:.3f}` ({abs(level-sl):.3f})\n"
+        f"TP1   : `{tp1:.3f}`\n"
+        f"TP2   : `{tp:.3f}`\n"
+        f"Lot   : `{lot}` | Exp: {config.PENDING_EXPIRY_MINUTES}m"
     )
     return ticket
 
