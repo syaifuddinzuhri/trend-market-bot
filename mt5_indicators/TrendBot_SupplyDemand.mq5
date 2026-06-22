@@ -153,11 +153,10 @@ void _ScanZones(const int total, const datetime &time[],
       if (is_demand && demand_count >= MaxZones) continue;
       if (!is_demand && supply_count >= MaxZones) continue;
 
-      // ── Cek duplikat (zona tumpang tindih) ───────────────────
+      // ── Cek duplikat (zona tumpang tindih, semua tipe) ───────
       bool duplicate = false;
       for (int z = 0; z < zone_count; z++)
       {
-         if (zones[z].is_demand != is_demand) continue;
          double overlap_top    = MathMin(zones[z].top,    zone_top);
          double overlap_bottom = MathMax(zones[z].bottom, zone_bottom);
          if (overlap_top > overlap_bottom) { duplicate = true; break; }
