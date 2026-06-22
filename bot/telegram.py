@@ -122,6 +122,7 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
     sl_l      = data.get("sl_level", "")
     tp1_l     = data.get("tp1_level", "")
     tp2_l     = data.get("tp2_level", "")
+    missing   = data.get("missing_filters", [])
 
     arrow = "🟢 BUY" if direction == "BUY" else ("🔴 SELL" if direction == "SELL" else "⚪ SIDEWAYS")
     filter_icon = "🟢" if passed >= total else ("🔥" if passed >= 6 else ("⏳" if passed >= 4 else "💤"))
@@ -144,6 +145,9 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
         f"",
         f"📌 *{rec}*",
     ]
+
+    if missing:
+        lines.append(f"❌ Belum lolos: `{'`, `'.join(missing)}`")
 
     if entry_z:
         lines += [

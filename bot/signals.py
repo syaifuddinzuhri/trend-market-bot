@@ -260,55 +260,67 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         move_label = "Ranging / tidak jelas"
         is_pullback_now = False
 
+    # ── Filter yang belum lolos ───────────────────────────────────────
+    filter_names = ["Session", "News", "Trend H4", "ADX", "ATR", "Pullback H1", "Struktur M15", "Candle"]
+    filter_vals  = [session_ok, news_ok, trend_ok, adx_ok, atr_ok, pullback_ok, struct_ok, candle_ok]
+    missing_filters = [filter_names[i] for i, v in enumerate(filter_vals) if not v]
+
     # ── Rekomendasi ──────────────────────────────────────────────────
     sym_info = mt5.symbol_info(config.SYMBOL)
     pip_size = max(sym_info.point * 10, 0.1) if sym_info else 0.1
 
+    entry_zone = sl_level = tp1_level = tp2_level = ""
+
+    def _levels(ref, d):
+        nonlocal entry_zone, sl_level, tp1_level, tp2_level
+        if d == "SELL":
+            entry_zone = f"{ref:.2f}"
+            sl_level   = f"{ref + config.MAX_SL_POINTS * pip_size:.2f}"
+            tp1_level  = f"{ref - config.TP1_PIPS * pip_size:.2f}"
+            tp2_level  = f"{ref - config.TP2_PIPS * pip_size:.2f}"
+        else:
+            entry_zone = f"{ref:.2f}"
+            sl_level   = f"{ref - config.MAX_SL_POINTS * pip_size:.2f}"
+            tp1_level  = f"{ref + config.TP1_PIPS * pip_size:.2f}"
+            tp2_level  = f"{ref + config.TP2_PIPS * pip_size:.2f}"
+
     if not trend_ok:
         recommendation = "⏸ TUNGGU — Trend H4 belum jelas (EMA50 vs EMA200 belum silang)"
-        entry_zone = ""
-        sl_level = ""
-        tp1_level = ""
-        tp2_level = ""
+
     elif passed >= 7:
-        arrow = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
-        recommendation = f"✅ SIAP ENTRY {arrow} — semua filter hampir penuh ({passed}/{total})"
-        if direction == "SELL":
-            entry_zone = f"{current_price:.2f}"
-            sl_level   = f"{current_price + config.MAX_SL_POINTS * pip_size:.2f}"
-            tp1_level  = f"{current_price - config.TP1_PIPS * pip_size:.2f}"
-            tp2_level  = f"{current_price - config.TP2_PIPS * pip_size:.2f}"
-        else:
-            entry_zone = f"{current_price:.2f}"
-            sl_level   = f"{current_price - config.MAX_SL_POINTS * pip_size:.2f}"
-            tp1_level  = f"{current_price + config.TP1_PIPS * pip_size:.2f}"
-            tp2_level  = f"{current_price + config.TP2_PIPS * pip_size:.2f}"
+        arrow_txt = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+        recommendation = f"✅ SIAP ENTRY {arrow_txt} — {passed}/{total} filter lolos"
+        _levels(current_price, direction)
+
     elif is_pullback_now and direction == "SELL":
         target = max(ema20_h1, ema50_h1)
         recommendation = (
-            f"⏳ TUNGGU SELL — sedang pullback naik\n"
-            f"   Jika harga naik ke {target:.2f}–{target + atr_val * 0.5:.2f} lalu rejection → SELL"
+            f"⏳ TUNGGU SELL — sedang pullback naik ke EMA\n"
+            f"Zona entry: `{target:.2f}–{target + atr_val * 0.3:.2f}` → tunggu rejection/pin bar"
         )
-        entry_zone = f"{target:.2f}–{target + atr_val * 0.5:.2f}"
-        sl_level   = f"{target + config.MAX_SL_POINTS * pip_size:.2f}"
-        tp1_level  = f"{target - config.TP1_PIPS * pip_size:.2f}"
-        tp2_level  = f"{target - config.TP2_PIPS * pip_size:.2f}"
+        _levels(target, "SELL")
+        entry_zone = f"{target:.2f}–{target + atr_val * 0.3:.2f}"
+
     elif is_pullback_now and direction == "BUY":
         target = min(ema20_h1, ema50_h1)
         recommendation = (
-            f"⏳ TUNGGU BUY — sedang pullback turun\n"
-            f"   Jika harga turun ke {target - atr_val * 0.5:.2f}–{target:.2f} lalu bounce → BUY"
+            f"⏳ TUNGGU BUY — sedang pullback turun ke EMA\n"
+            f"Zona entry: `{target - atr_val * 0.3:.2f}–{target:.2f}` → tunggu bounce/pin bar"
         )
-        entry_zone = f"{target - atr_val * 0.5:.2f}–{target:.2f}"
-        sl_level   = f"{target - config.MAX_SL_POINTS * pip_size:.2f}"
-        tp1_level  = f"{target + config.TP1_PIPS * pip_size:.2f}"
-        tp2_level  = f"{target + config.TP2_PIPS * pip_size:.2f}"
+        _levels(target, "BUY")
+        entry_zone = f"{target - atr_val * 0.3:.2f}–{target:.2f}"
+
     else:
-        recommendation = f"👀 MONITOR — trend {direction} tapi filter belum cukup ({passed}/{total})"
-        entry_zone = ""
-        sl_level = ""
-        tp1_level = ""
-        tp2_level = ""
+        # Trend ada tapi belum pullback — berikan info spesifik filter apa yang kurang
+        arrow_txt = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+        if direction == "SELL":
+            next_action = f"Pantau apakah harga naik dulu ke EMA20 ({ema20_h1:.2f}) lalu balik turun"
+        else:
+            next_action = f"Pantau apakah harga turun dulu ke EMA20 ({ema20_h1:.2f}) lalu balik naik"
+        recommendation = (
+            f"👀 MONITOR {arrow_txt} — tunggu filter lengkap\n"
+            f"{next_action}"
+        )
 
     return {
         "direction":       direction,
@@ -335,6 +347,7 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         "atr_ok":          atr_ok,
         "session_ok":      session_ok,
         "news_ok":         news_ok,
+        "missing_filters": missing_filters,
     }
 
 
