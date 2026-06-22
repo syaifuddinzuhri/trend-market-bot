@@ -5,6 +5,27 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7.0] — 2026-06-22
+
+### Added
+- **TrendBot Scalper** — bot terpisah (`scalper.py`) untuk grid entry M5
+  - Deteksi S&D zone otomatis dari data M5 (Python, tanpa MT5 indicator)
+  - Pasang `SCALP_GRID_COUNT` pending order (Sell/Buy Limit) di dalam zona sekaligus
+  - Total lot dibagi rata: `SCALP_LOT / SCALP_GRID_COUNT` per order
+  - SL & TP dalam pip: `SCALP_SL_PIPS` dan `SCALP_TP_PIPS` (default 8:8, 1:1)
+  - Auto-cancel pending setelah `SCALP_EXPIRY_MINUTES` menit (default 20)
+  - Filter ADX M5 minimum (`SCALP_ADX_MIN=20`)
+  - Cooldown 5 menit setelah grid dipasang
+  - Magic number terpisah (`SCALP_MAGIC=202407`) — tidak konflik dengan bot utama
+  - Notif Telegram saat grid dipasang: zona, jumlah order, lot, SL/TP, expiry
+- `scalp/zones.py` — deteksi S&D zone dari OHLC Python
+- `scalp/grid.py` — place/cancel/manage grid pending orders
+- `scalp_config.py` — konfigurasi scalper dari `.env`
+- `start_scalper.bat` — launcher Windows untuk scalper
+- Parameter `.env` baru: `SCALP_*` (lihat `.env.example`)
+
+---
+
 ## [1.6.0] — 2026-06-22
 
 ### Added
