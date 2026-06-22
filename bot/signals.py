@@ -146,6 +146,57 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
     return all_ok
 
 
+def evaluate_pending(
+    df_h4: pd.DataFrame,
+    df_h1: pd.DataFrame,
+) -> dict | None:
+    """
+    Evaluasi apakah kondisi cukup untuk pasang pending limit order.
+    Syarat: session OK + news OK + trend OK + ADX OK + ATR OK
+    (Pullback, Struct, Candle belum wajib — pending order tunggu di level EMA)
+    Returns dict dengan level, direction, dll — atau None.
+    """
+    if not is_trading_session():
+        return None
+    if is_news_lock():
+        return None
+
+    trend = get_trend(df_h4)
+    if trend == NO_TRADE:
+        return None
+    direction = "BUY" if trend == TREND_BULLISH else "SELL"
+
+    last_h1  = df_h1.iloc[-1]
+    adx_val  = last_h1["adx"]
+    atr_val  = last_h1["atr"]
+    atr_ma   = last_h1.get("atr_ma", 0)
+
+    if adx_val < config.ADX_MIN:
+        return None
+    if pd.isna(atr_ma) or atr_val < atr_ma * config.ATR_MA_RATIO:
+        return None
+
+    # Level pending = EMA20 H1 (area pullback target)
+    ema20 = last_h1.get("ema20", 0)
+    ema50 = last_h1.get("ema50", 0)
+    if ema20 <= 0:
+        return None
+
+    # Untuk SELL LIMIT: pasang di EMA20 H1 (harga pullback ke sana lalu reject)
+    # Untuk BUY LIMIT: pasang di EMA20 H1
+    level = ema20
+
+    return {
+        "direction": direction,
+        "trend":     trend,
+        "adx":       adx_val,
+        "atr":       atr_val,
+        "level":     level,
+        "ema20_h1":  ema20,
+        "ema50_h1":  ema50,
+    }
+
+
 def _base_filters(df_h4: pd.DataFrame, df_h1: pd.DataFrame) -> tuple[str | None, str, float, float]:
     if not is_trading_session():
         return None, "", 0, 0

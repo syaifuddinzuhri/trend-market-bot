@@ -164,6 +164,56 @@ def _open_trade(sig: dict, df_h1, label: str = "") -> bool:
     return False
 
 
+def _place_pending(pend: dict, df_h1) -> bool:
+    """Pasang pending limit order di level EMA H1."""
+    direction = pend["direction"]
+    level     = pend["level"]
+
+    # Cek tidak ada pending order yang sama arah
+    if trade.has_pending_for_direction(config.SYMBOL, direction):
+        log_console(f"[PEND] Sudah ada pending {direction} — skip")
+        return False
+
+    # Cek harga sekarang tidak sudah melewati level
+    tick = mt5.symbol_info_tick(config.SYMBOL)
+    if tick is None:
+        return False
+    current = tick.ask if direction == "BUY" else tick.bid
+    if direction == "BUY" and current <= level:
+        log_console(f"[PEND] Harga {current:.2f} sudah di bawah level BUY LIMIT {level:.2f} — skip")
+        return False
+    if direction == "SELL" and current >= level:
+        log_console(f"[PEND] Harga {current:.2f} sudah di atas level SELL LIMIT {level:.2f} — skip")
+        return False
+
+    sl, sl_dist = calc_sl(df_h1, direction, level)
+    if sl_dist <= 0:
+        return False
+
+    tp = (level + sl_dist * config.TP2_R if direction == "BUY"
+          else level - sl_dist * config.TP2_R)
+
+    balance = connector.get_balance()
+    lot = get_lot_size(config.SYMBOL, sl_dist, balance)
+
+    ticket = trade.place_pending_order(
+        symbol=config.SYMBOL,
+        direction=direction,
+        level=level,
+        lot=lot,
+        sl=sl,
+        tp=tp,
+        pattern="ema_retest",
+    )
+    if ticket:
+        log_console(
+            f"[BOT] Pending {direction} LIMIT dipasang | "
+            f"level={level:.2f} | SL={sl:.2f} | TP={tp:.2f} | lot={lot}"
+        )
+        return True
+    return False
+
+
 def _status_line():
     info = connector.account_info()
     if info is None:
@@ -240,19 +290,34 @@ def _run_signal_cycle():
     # ── Kelola posisi terbuka (TP1/TP2/Trail/Pyramid) ────────────
     trade.manage_open_positions(config.SYMBOL, df_h1=df_h1)
 
+    # ── Kelola & validasi pending order ──────────────────────────
+    existing_dir = None
+    parent_positions = _get_parent_positions()
+    if parent_positions:
+        existing_dir = "BUY" if parent_positions[0].type == mt5.ORDER_TYPE_BUY else "SELL"
+    trade.manage_pending_orders(config.SYMBOL, direction_valid=existing_dir)
+
     # Pre-checks umum
     if _daily_limit_reached():
         log_console(f"[BOT] Daily limit ({_trades_today}/{config.MAX_TRADES_PER_DAY}) — skip")
         return
 
-    parent_positions = _get_parent_positions()
     n_open = len(parent_positions)
 
     # ── KASUS 1: Belum ada posisi → cari PRIMARY signal ──────────
     if n_open == 0:
         sig = signals.evaluate(df_h4, df_h1, df_m15, df_m5)
         if sig:
+            # Ada market signal → cancel semua pending dulu, lalu market order
+            trade.manage_pending_orders(config.SYMBOL, direction_valid=None)
             _open_trade(sig, df_h1, label="PRIMARY")
+            return
+
+        # Tidak ada market signal → coba pasang pending limit jika diaktifkan
+        if config.PENDING_ENABLED and trade.get_pending_count(config.SYMBOL) == 0:
+            pend = signals.evaluate_pending(df_h4, df_h1)
+            if pend:
+                _place_pending(pend, df_h1)
         return
 
     # ── KASUS 2: Ada posisi, belum capai MAX → cari CONTINUATION ─

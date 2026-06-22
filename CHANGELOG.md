@@ -5,6 +5,28 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.0] — 2026-06-22
+
+### Added
+- **Pending Order otomatis (Buy Limit / Sell Limit)** — bot pasang limit order di level EMA20 H1 saat 5+ filter lolos tapi market signal belum terpenuhi
+- `place_pending_order()` di `bot/trade.py` — kirim ORDER_TYPE_BUY_LIMIT / SELL_LIMIT ke MT5 dengan expiry otomatis
+- `cancel_pending_order()` — cancel satu pending order dan hapus dari registry
+- `manage_pending_orders()` — dipanggil setiap cycle, auto-cancel jika:
+  - Trend berbalik arah
+  - Session tutup
+  - News lock aktif
+  - Harga sudah terlalu jauh dari level (> PENDING_MAX_DISTANCE_ATR × ATR)
+- `has_pending_for_direction()` — cegah duplikasi pending order
+- `evaluate_pending()` di `bot/signals.py` — evaluasi kondisi untuk pending (session + news + trend + ADX + ATR)
+- `_place_pending()` di `main.py` — hitung SL/TP/lot dan pasang limit
+- Parameter baru di `.env`: `PENDING_ENABLED`, `PENDING_EXPIRY_MINUTES`, `PENDING_MAX_DISTANCE_ATR`
+
+### Changed
+- `_run_signal_cycle()`: jika tidak ada market signal dan no open positions → coba pasang pending limit
+- Jika market signal muncul saat ada pending → cancel pending dulu, lalu market order
+
+---
+
 ## [1.4.2] — 2026-06-22
 
 ### Changed

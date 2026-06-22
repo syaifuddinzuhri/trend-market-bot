@@ -78,6 +78,12 @@ NEWS_BUFFER_MINUTES = 30
 # Swing lookback bars (dipakai di H1 sekarang)
 SWING_LOOKBACK = 20
 
+# ── Pending Order (Limit) ─────────────────────────────────────────
+PENDING_ENABLED             = os.getenv("PENDING_ENABLED", "true").lower() == "true"
+PENDING_MIN_FILTERS         = int(os.getenv("PENDING_MIN_FILTERS", 5))    # min filter lolos untuk pasang limit
+PENDING_EXPIRY_MINUTES      = int(os.getenv("PENDING_EXPIRY_MINUTES", 120))  # auto-expire setelah N menit
+PENDING_MAX_DISTANCE_ATR    = float(os.getenv("PENDING_MAX_DISTANCE_ATR", 3.0))  # cancel jika harga > N×ATR dari level
+
 # Timeframes (MT5 constants loaded lazily)
 TF_H4  = None
 TF_H1  = None

@@ -392,3 +392,173 @@ def cleanup_closed(symbol: str):
     stale = [t for t in list(_pos_state) if t not in current]
     for t in stale:
         _pos_state.pop(t, None)
+
+
+# ── Pending Order (Limit) ─────────────────────────────────────────
+# Registry pending order yang dibuka bot: {ticket: {direction, placed_at, level}}
+_pending_state: dict[int, dict] = {}
+
+
+def place_pending_order(
+    symbol: str,
+    direction: str,
+    level: float,
+    lot: float,
+    sl: float,
+    tp: float,
+    pattern: str = "limit",
+) -> int | None:
+    """
+    Pasang Sell Limit atau Buy Limit di level EMA H1.
+    Expiry = PENDING_EXPIRY_MINUTES menit dari sekarang.
+    """
+    import time as _time
+    sym_info = mt5.symbol_info(symbol)
+    if sym_info is None:
+        return None
+
+    order_type = (
+        mt5.ORDER_TYPE_BUY_LIMIT if direction == "BUY"
+        else mt5.ORDER_TYPE_SELL_LIMIT
+    )
+
+    # Expiry time MT5 (epoch seconds)
+    expiry_sec = int(_time.time()) + config.PENDING_EXPIRY_MINUTES * 60
+
+    request = {
+        "action":      mt5.TRADE_ACTION_PENDING,
+        "symbol":      symbol,
+        "volume":      lot,
+        "type":        order_type,
+        "price":       round(level, sym_info.digits),
+        "sl":          round(sl, sym_info.digits),
+        "tp":          round(tp, sym_info.digits),
+        "deviation":   config.SLIPPAGE,
+        "magic":       config.MAGIC_NUMBER,
+        "comment":     f"trendbot_limit_{pattern}",
+        "type_time":   mt5.ORDER_TIME_SPECIFIED,
+        "expiration":  expiry_sec,
+        "type_filling": mt5.ORDER_FILLING_RETURN,
+    }
+
+    result = _send_order(request)
+    if result is None:
+        return None
+
+    ticket = result.order
+    sl_dist = abs(level - sl)
+    tp1 = level + sl_dist * config.TP1_R if direction == "BUY" else level - sl_dist * config.TP1_R
+
+    _pending_state[ticket] = {
+        "direction": direction,
+        "level":     level,
+        "sl":        sl,
+        "tp":        tp,
+        "lot":       lot,
+        "placed_at": _time.time(),
+        "symbol":    symbol,
+    }
+
+    log_console(
+        f"[PEND] {direction} LIMIT | ticket={ticket} | "
+        f"level={level:.2f} | SL={sl:.2f} | TP1={tp1:.2f} | TP2={tp:.2f} | lot={lot}"
+    )
+    telegram.notify_signal(
+        direction, symbol, level, sl, tp1, tp, lot, f"LIMIT_{pattern}",
+        structure="PENDING", strength="",
+    )
+    return ticket
+
+
+def cancel_pending_order(ticket: int, reason: str = "") -> bool:
+    """Cancel satu pending order berdasarkan ticket."""
+    request = {
+        "action": mt5.TRADE_ACTION_REMOVE,
+        "order":  ticket,
+    }
+    result = mt5.order_send(request)
+    ok = result is not None and result.retcode == mt5.TRADE_RETCODE_DONE
+    if ok:
+        _pending_state.pop(ticket, None)
+        log_console(f"[PEND] Cancelled ticket={ticket} | {reason}")
+    else:
+        code = result.retcode if result else "None"
+        log_console(f"[PEND] Cancel FAILED ticket={ticket} retcode={code}", level="WARN")
+    return ok
+
+
+def manage_pending_orders(symbol: str, direction_valid: str | None):
+    """
+    Dipanggil setiap cycle dari main.py.
+    Cancel pending order jika:
+    - Trend berbalik (direction berubah)
+    - Session habis / news lock
+    - Sudah expired (MT5 harusnya auto-cancel, ini sebagai fallback)
+    - Harga sudah melewati level (tidak relevan lagi)
+    """
+    import time as _time
+    from bot.session import is_trading_session
+    from bot.news_filter import is_news_lock
+
+    if not _pending_state:
+        return
+
+    # Ambil semua pending order aktif dari MT5
+    mt5_orders = {o.ticket for o in (mt5.orders_get(symbol=symbol) or [])
+                  if o.magic == config.MAGIC_NUMBER}
+
+    tick = mt5.symbol_info_tick(symbol)
+    current_price = tick.bid if tick else 0
+
+    for ticket in list(_pending_state.keys()):
+        state = _pending_state[ticket]
+
+        # Sudah tidak ada di MT5 (filled atau expired)
+        if ticket not in mt5_orders:
+            log_console(f"[PEND] ticket={ticket} sudah tidak aktif (filled/expired)")
+            _pending_state.pop(ticket, None)
+            continue
+
+        reason = None
+
+        # Trend berbalik
+        if direction_valid and state["direction"] != direction_valid:
+            reason = f"trend berbalik → {direction_valid}"
+
+        # Session habis atau news lock
+        elif not is_trading_session():
+            reason = "session tutup"
+        elif is_news_lock():
+            reason = "news lock"
+
+        # Harga sudah melewati level (terlalu jauh, peluang tidak relevan)
+        elif current_price > 0:
+            dist = abs(current_price - state["level"])
+            sym_info = mt5.symbol_info(symbol)
+            atr_approx = (sym_info.point * 100) if sym_info else 0.5
+            if dist > atr_approx * config.PENDING_MAX_DISTANCE_ATR:
+                reason = f"harga jauh dari level ({dist:.2f})"
+
+        if reason:
+            cancel_pending_order(ticket, reason)
+
+
+def get_pending_count(symbol: str) -> int:
+    """Jumlah pending order bot yang aktif."""
+    mt5_orders = {o.ticket for o in (mt5.orders_get(symbol=symbol) or [])
+                  if o.magic == config.MAGIC_NUMBER}
+    # Sync: hapus yang sudah tidak ada di MT5
+    for t in list(_pending_state.keys()):
+        if t not in mt5_orders:
+            _pending_state.pop(t, None)
+    return len(_pending_state)
+
+
+def has_pending_for_direction(symbol: str, direction: str) -> bool:
+    """Cek apakah sudah ada pending order untuk arah ini."""
+    mt5_orders = {o.ticket for o in (mt5.orders_get(symbol=symbol) or [])
+                  if o.magic == config.MAGIC_NUMBER}
+    for ticket, state in _pending_state.items():
+        if ticket in mt5_orders and state["direction"] == direction:
+            return True
+    return False
