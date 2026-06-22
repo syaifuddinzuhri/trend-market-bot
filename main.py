@@ -19,12 +19,14 @@ from bot.session import is_trading_session
 from bot.news_filter import is_news_lock
 from bot.calendar import refresh as calendar_refresh
 
-HEARTBEAT_INTERVAL    = 5    # detik antara console status
-SIGNAL_CHECK_INTERVAL = 5    # detik antara full signal check (M5 butuh respons cepat)
+HEARTBEAT_INTERVAL    = 5      # detik antara console status
+SIGNAL_CHECK_INTERVAL = 5      # detik antara full signal check (M5 butuh respons cepat)
+ANALYSIS_INTERVAL     = 1800   # detik antara analisa Telegram (30 menit)
 
 # Ticket yang dibuka bot session ini
 _open_tickets: set[int] = set()
 _last_signal_check = 0.0
+_last_analysis_sent = 0.0
 
 # Daily trade counter (hanya posisi induk, bukan pyramid)
 _trades_today: int = 0
@@ -214,6 +216,52 @@ def _place_pending(pend: dict, df_h1, df_m5=None) -> bool:
     return False
 
 
+def _send_analysis(df_h4, df_h1, df_m15, df_m5=None):
+    """Kirim analisa market + status posisi ke Telegram."""
+    try:
+        data = signals.build_analysis(df_h4, df_h1, df_m15, df_m5)
+
+        # Kumpulkan posisi terbuka
+        positions = []
+        for pos in (mt5.positions_get(symbol=config.SYMBOL) or []):
+            if pos.magic != config.MAGIC_NUMBER:
+                continue
+            direction = "BUY" if pos.type == mt5.ORDER_TYPE_BUY else "SELL"
+            tick = mt5.symbol_info_tick(config.SYMBOL)
+            current = tick.bid if direction == "BUY" else tick.ask
+
+            state = trade.get_state(pos.ticket)
+            sl_dist = abs(pos.price_open - pos.sl) if pos.sl else 0
+            tp1 = (pos.price_open + sl_dist * config.TP1_R if direction == "BUY"
+                   else pos.price_open - sl_dist * config.TP1_R) if sl_dist else pos.tp
+            positions.append({
+                "direction": direction,
+                "entry":     pos.price_open,
+                "current":   current,
+                "sl":        pos.sl,
+                "tp1":       tp1,
+                "tp2":       pos.tp,
+                "lot":       pos.volume,
+                "pnl":       pos.profit,
+            })
+
+        telegram.notify_analysis(
+            symbol=config.SYMBOL,
+            direction=data["direction"],
+            trend_label=data["direction"],
+            adx=data["adx"],
+            atr=data["atr"],
+            structure=data["structure"],
+            passed=data["passed"],
+            total=data["total"],
+            positions=positions,
+            currency=config.ACCOUNT_CURRENCY,
+        )
+        log_console("[BOT] Analisa dikirim ke Telegram")
+    except Exception as e:
+        log_console(f"[BOT] Gagal kirim analisa: {e}", level="WARN")
+
+
 def _status_line():
     info = connector.account_info()
     if info is None:
@@ -350,7 +398,7 @@ def main():
     telegram.send("🤖 *TrendBot v1.2 started* | XAUUSD")
     calendar_refresh()
 
-    global _last_signal_check
+    global _last_signal_check, _last_analysis_sent
     last_heartbeat        = 0.0
     last_calendar_refresh = 0.0
     CALENDAR_REFRESH_INTERVAL = 6 * 3600
@@ -374,6 +422,18 @@ def main():
                 except Exception as e:
                     log_console(f"[BOT] Signal cycle error: {e}", level="ERROR")
                 _last_signal_check = now
+
+            if now - _last_analysis_sent >= ANALYSIS_INTERVAL:
+                try:
+                    df_h4  = get_h4(config.SYMBOL)
+                    df_h1  = get_h1(config.SYMBOL)
+                    df_m15 = get_m15(config.SYMBOL)
+                    df_m5  = get_m5(config.SYMBOL)
+                    if df_h4 is not None and df_h1 is not None and df_m15 is not None:
+                        _send_analysis(df_h4, df_h1, df_m15, df_m5)
+                except Exception as e:
+                    log_console(f"[BOT] Analysis error: {e}", level="WARN")
+                _last_analysis_sent = now
 
             time.sleep(1)
 

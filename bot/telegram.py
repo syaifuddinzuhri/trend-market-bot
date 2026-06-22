@@ -97,6 +97,61 @@ def notify_pyramid(direction: str, symbol: str, entry: float, sl: float, tp1: fl
     send(msg)
 
 
+def notify_analysis(
+    symbol: str,
+    direction: str,
+    trend_label: str,
+    adx: float,
+    atr: float,
+    structure: str,
+    passed: int,
+    total: int,
+    positions: list,
+    currency: str = "IDR",
+):
+    """
+    Kirim analisa market ke Telegram setiap 30 menit.
+    positions = list of dict: {direction, entry, sl, tp1, tp2, current, pnl, lot}
+    """
+    arrow = "🟢 BUY" if direction == "BUY" else ("🔴 SELL" if direction == "SELL" else "⚪ SIDEWAYS")
+    status_icon = "🟢" if passed == total else ("🔥" if passed >= 6 else ("⏳" if passed >= 4 else "💤"))
+
+    struct_short = {
+        "BULLISH_BOS": "BOS↑", "BEARISH_BOS": "BOS↓",
+        "BULLISH_CHOCH": "CHoCH↑", "BEARISH_CHOCH": "CHoCH↓",
+    }.get(structure, structure[:8] if structure else "—")
+
+    lines = [
+        f"📊 *Analisa {symbol}*",
+        f"",
+        f"Trend    : {arrow}",
+        f"ADX      : `{adx:.1f}` | ATR : `{atr:.2f}`",
+        f"Struktur : `{struct_short}`",
+        f"Filter   : {status_icon} `{passed}/{total}`",
+    ]
+
+    if positions:
+        for p in positions:
+            pnl_str = f"{p['pnl']:+,.0f} {currency}"
+            pip_to_tp1 = abs(p['tp1'] - p['current'])
+            pip_to_sl  = abs(p['sl']  - p['current'])
+            pos_arrow  = "🟢" if p['pnl'] >= 0 else "🔴"
+            lines += [
+                f"",
+                f"📍 *Posisi {p['direction']} aktif* {pos_arrow}",
+                f"Entry    : `{p['entry']:.3f}`",
+                f"Sekarang : `{p['current']:.3f}` ({pnl_str})",
+                f"SL       : `{p['sl']:.3f}` ({pip_to_sl:.2f} pip buffer)",
+                f"TP1      : `{p['tp1']:.3f}` (~{pip_to_tp1:.2f} pip lagi)",
+                f"TP2      : `{p['tp2']:.3f}`",
+                f"Lot      : `{p['lot']}`",
+            ]
+    else:
+        lines += ["", "📭 *Tidak ada posisi terbuka*"]
+
+    send("\n".join(lines))
+
+
 def notify_trail_exit(ticket: int, symbol: str, price: float, pnl: float):
     msg = (
         f"🏁 *Trail Exit — {symbol}*\n"

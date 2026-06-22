@@ -146,6 +146,51 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
     return all_ok
 
 
+def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
+    """
+    Kumpulkan data analisa market untuk dikirim ke Telegram.
+    Return dict berisi semua info yang dibutuhkan notify_analysis().
+    """
+    session_ok = is_trading_session()
+    news_ok    = not is_news_lock()
+    trend      = get_trend(df_h4)
+    trend_ok   = trend != NO_TRADE
+    direction  = "BUY" if trend == TREND_BULLISH else ("SELL" if trend == TREND_BEARISH else "—")
+
+    last_h1    = df_h1.iloc[-1]
+    adx_val    = last_h1["adx"]
+    atr_val    = last_h1["atr"]
+    atr_ma_val = last_h1.get("atr_ma", 0)
+    adx_ok     = adx_val >= config.ADX_MIN
+    atr_ok     = (not pd.isna(atr_ma_val)) and (atr_val >= atr_ma_val * config.ATR_MA_RATIO)
+    pullback_ok = has_pullback(df_h1, trend) if trend_ok else False
+
+    structure  = get_market_structure(df_m15)
+    struct_ok  = (
+        (direction == "BUY"  and is_bullish_structure(structure)) or
+        (direction == "SELL" and is_bearish_structure(structure))
+    ) if trend_ok else False
+
+    entry_df  = df_m5 if df_m5 is not None else df_m15
+    pattern   = check_pattern(entry_df)
+    bull_pat  = pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}
+    bear_pat  = pattern in {BEARISH_PIN_BAR, BEARISH_ENGULFING}
+    candle_ok = (direction == "BUY" and bull_pat) or (direction == "SELL" and bear_pat) if trend_ok else False
+
+    filters = [session_ok, news_ok, trend_ok, adx_ok, atr_ok, pullback_ok, struct_ok, candle_ok]
+    passed  = sum(filters)
+    total   = len(filters)
+
+    return {
+        "direction": direction,
+        "adx":       adx_val,
+        "atr":       atr_val,
+        "structure": structure,
+        "passed":    passed,
+        "total":     total,
+    }
+
+
 def evaluate_pending(
     df_h4: pd.DataFrame,
     df_h1: pd.DataFrame,
