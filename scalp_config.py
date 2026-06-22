@@ -33,9 +33,10 @@ SCALP_ZONE_LOOKBACK   = int(os.getenv("SCALP_ZONE_LOOKBACK", 100)) # bar M5 untu
 SCALP_MAX_ZONES       = int(os.getenv("SCALP_MAX_ZONES", 3))       # maks zona yang dicari
 
 # ── Filter ────────────────────────────────────────────────────────
-SCALP_ADX_MIN         = float(os.getenv("SCALP_ADX_MIN", 20.0))    # ADX minimum
-SCALP_MAX_OPEN        = int(os.getenv("SCALP_MAX_OPEN", 10))        # maks posisi scalp terbuka
-SCALP_CHECK_INTERVAL  = int(os.getenv("SCALP_CHECK_INTERVAL", 10)) # detik antar cycle
+SCALP_ADX_MIN             = float(os.getenv("SCALP_ADX_MIN", 20.0))    # ADX minimum
+SCALP_MAX_OPEN            = int(os.getenv("SCALP_MAX_OPEN", 10))        # maks posisi scalp terbuka
+SCALP_CHECK_INTERVAL      = int(os.getenv("SCALP_CHECK_INTERVAL", 10)) # detik antar cycle
+SCALP_MAX_ZONE_DISTANCE   = float(os.getenv("SCALP_MAX_ZONE_DISTANCE", 10.0))  # pip maks jarak harga ke zona
 
 # ── Session (sama dengan bot utama) ───────────────────────────────
 SESSION_START_WIB = int(os.getenv("SESSION_START_WIB", 13))

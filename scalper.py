@@ -182,9 +182,30 @@ def _run_cycle():
         log_console(f"[SCALP] Tidak ada zona {direction} yang valid — skip")
         return
 
+    # ── Filter jarak harga ke zona ───────────────────────────────
+    sym_info = mt5.symbol_info(symbol)
+    pip_size = (sym_info.point * 10) if sym_info else 0.1
+    max_dist = sc.SCALP_MAX_ZONE_DISTANCE * pip_size
+
+    if direction == "SELL":
+        dist_to_zone = zone["bottom"] - current  # harga harus di bawah zona
+    else:
+        dist_to_zone = current - zone["top"]     # harga harus di atas zona
+
+    if dist_to_zone < 0:
+        log_console(f"[SCALP] Harga sudah masuk zona — skip")
+        return
+    if dist_to_zone > max_dist:
+        log_console(
+            f"[SCALP] Zona terlalu jauh ({dist_to_zone/pip_size:.1f} pip "
+            f"> max {sc.SCALP_MAX_ZONE_DISTANCE} pip) — skip"
+        )
+        return
+
     log_console(
         f"[SCALP] {direction} | ADX={adx:.1f} | ATR={atr:.4f} | "
-        f"Zona {zone['type']} {zone['bottom']:.3f}–{zone['top']:.3f}"
+        f"Zona {zone['type']} {zone['bottom']:.3f}–{zone['top']:.3f} | "
+        f"Jarak={dist_to_zone/pip_size:.1f} pip"
     )
 
     # ── Pasang grid ───────────────────────────────────────────────
