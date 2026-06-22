@@ -26,6 +26,12 @@ from bot.logger import log_console
 
 _ADX_CHOCH_BONUS = 5
 
+# Throttle alert manual — cegah spam Telegram tiap 5 detik
+# Key: (symbol, direction, passed) → epoch seconds terakhir kirim
+_alert_sent_at: dict[tuple, float] = {}
+ALERT_COOLDOWN_SECONDS = 300   # kirim ulang paling cepat 5 menit
+ALERT_MIN_FILTERS = 7          # kirim jika lolos >= N filter
+
 
 def _ok(v: bool) -> str:
     return "✅" if v else "❌"
@@ -133,8 +139,8 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
             pass
 
     # Jika hampir entry, cetak filter mana yang belum terpenuhi
+    missing = []
     if passed >= 6 and not all_ok:
-        missing = []
         if not struct_ok:   missing.append(f"Tunggu {direction} structure di M15")
         if not candle_ok:   missing.append(f"Tunggu candle konfirmasi ({direction})")
         if not pullback_ok: missing.append(f"Tunggu pullback ke EMA20/50 H1")
@@ -142,6 +148,49 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
         if not adx_ok:      missing.append(f"Tunggu ADX naik (skrg {adx_val:.1f} < {config.ADX_MIN})")
         for m in missing:
             log_console(f"[SCAN]   ↳ {m}")
+
+    # ── Alert manual ke Telegram jika >= ALERT_MIN_FILTERS ───────
+    if passed >= ALERT_MIN_FILTERS and direction in ("BUY", "SELL"):
+        import time as _t
+        key = (config.SYMBOL, direction, passed)
+        now = _t.time()
+        last = _alert_sent_at.get(key, 0)
+        if now - last >= ALERT_COOLDOWN_SECONDS:
+            _alert_sent_at[key] = now
+            # Ambil proyeksi entry/SL/TP dari tick terbaru
+            try:
+                tick = mt5.symbol_info_tick(config.SYMBOL)
+                entry_price = tick.ask if direction == "BUY" else tick.bid
+                from bot.risk import calc_sl
+                sl_price, sl_dist = calc_sl(df_h1, direction, entry_price)
+                sym_info = mt5.symbol_info(config.SYMBOL)
+                pip_size = (sym_info.point * 10) if sym_info else 0.1
+                if config.TP_MODE == "pips":
+                    tp1_price = entry_price + config.TP1_PIPS * pip_size if direction == "BUY" else entry_price - config.TP1_PIPS * pip_size
+                    tp2_price = entry_price + config.TP2_PIPS * pip_size if direction == "BUY" else entry_price - config.TP2_PIPS * pip_size
+                else:
+                    tp1_price = entry_price + sl_dist * config.TP1_R if direction == "BUY" else entry_price - sl_dist * config.TP1_R
+                    tp2_price = entry_price + sl_dist * config.TP2_R if direction == "BUY" else entry_price - sl_dist * config.TP2_R
+            except Exception:
+                sl_price = tp1_price = tp2_price = entry_price = 0.0
+
+            telegram.notify_alert_manual(
+                direction=direction,
+                symbol=config.SYMBOL,
+                passed=passed,
+                total=total,
+                adx=adx_val,
+                atr_val=atr_val,
+                atr_ma=atr_ma_val,
+                struct_short=struct_short,
+                candle_short=candle_short,
+                entry=entry_price,
+                sl=sl_price,
+                tp1=tp1_price,
+                tp2=tp2_price,
+                missing=missing,
+            )
+            log_console(f"[SCAN] ⚡ Alert manual dikirim ke Telegram ({passed}/{total})")
 
     return all_ok
 

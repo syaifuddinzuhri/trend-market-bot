@@ -5,6 +5,19 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.0] — 2026-06-22
+
+### Added
+- **Alert manual entry via Telegram** — notif otomatis saat filter >= 7/8
+  - Dikirim saat `scan_log()` mendeteksi 7 atau 8 filter lolos
+  - Isi notif: arah, ADX, ATR, struktur, candle, proyeksi entry/SL/TP1/TP2, dan filter yang belum lolos
+  - Throttle 5 menit (`ALERT_COOLDOWN_SECONDS=300`) — tidak spam tiap cycle
+  - Threshold dapat disesuaikan via `ALERT_MIN_FILTERS` (default 7) di `bot/signals.py`
+- `bot/telegram.py`: fungsi `notify_alert_manual()`
+- `bot/signals.py`: variabel `_alert_sent_at`, `ALERT_COOLDOWN_SECONDS`, `ALERT_MIN_FILTERS`
+
+---
+
 ## [1.8.0] — 2026-06-22
 
 ### Added

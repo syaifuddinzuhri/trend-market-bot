@@ -152,6 +152,47 @@ def notify_analysis(
     send("\n".join(lines))
 
 
+def notify_alert_manual(
+    direction: str,
+    symbol: str,
+    passed: int,
+    total: int,
+    adx: float,
+    atr_val: float,
+    atr_ma: float,
+    struct_short: str,
+    candle_short: str,
+    entry: float,
+    sl: float,
+    tp1: float,
+    tp2: float,
+    missing: list[str],
+):
+    """
+    Notif manual entry alert — dikirim saat filter >= 7/8.
+    Hanya dikirim sekali per kondisi (throttle di scan_log).
+    """
+    arrow = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+    missing_str = "\n".join(f"  ⚠️ {m}" for m in missing) if missing else "  ✅ Semua filter lolos"
+    msg = (
+        f"⚡ *ALERT MANUAL — {symbol}* ({passed}/{total})\n"
+        f"\n"
+        f"Arah     : {arrow}\n"
+        f"ADX      : `{adx:.1f}` | ATR: `{atr_val:.2f}` / MA `{atr_ma:.2f}`\n"
+        f"Struktur : `{struct_short}` | Candle: `{candle_short}`\n"
+        f"\n"
+        f"Entry    : `{entry:.2f}`\n"
+        f"SL       : `{sl:.2f}`\n"
+        f"TP1      : `{tp1:.2f}`\n"
+        f"TP2      : `{tp2:.2f}`\n"
+        f"\n"
+        f"*Belum lolos:*\n{missing_str}\n"
+        f"\n"
+        f"_Entry manual jika filter terpenuhi_"
+    )
+    send(msg)
+
+
 def notify_trail_exit(ticket: int, symbol: str, price: float, pnl: float):
     msg = (
         f"🏁 *Trail Exit — {symbol}*\n"
