@@ -546,15 +546,6 @@ def place_pending_order(
         f"[PEND] {direction} LIMIT dipasang | ticket={ticket} | "
         f"level={level:.3f} | SL={sl:.3f} | TP1={tp1:.3f} | TP2={tp:.3f} | lot={lot}"
     )
-    # Notif Telegram hanya sekali saat order terpasang — tidak dikirim ulang setiap cycle
-    telegram.send(
-        f"⏳ *PENDING {direction} — {symbol}*\n"
-        f"Level : `{level:.3f}`\n"
-        f"SL    : `{sl:.3f}` ({abs(level-sl):.3f})\n"
-        f"TP1   : `{tp1:.3f}`\n"
-        f"TP2   : `{tp:.3f}`\n"
-        f"Lot   : `{lot}` | Exp: {config.PENDING_EXPIRY_MINUTES}m"
-    )
     return ticket
 
 
@@ -615,8 +606,9 @@ def manage_pending_orders(symbol: str, direction_valid: str | None):
                 sl_dist = abs(level - sl)
                 tp1 = (level + sl_dist * config.TP1_R if direction == "BUY"
                        else level - sl_dist * config.TP1_R)
+                arrow = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
                 telegram.send(
-                    f"✅ *LIMIT FILLED {direction} — {symbol}*\n"
+                    f"*{arrow} ENTRY (Limit Filled) — {symbol}*\n"
                     f"Entry : `{level:.3f}`\n"
                     f"SL    : `{sl:.3f}` ({sl_dist:.3f})\n"
                     f"TP1   : `{tp1:.3f}`\n"

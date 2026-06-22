@@ -5,6 +5,15 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.5] — 2026-06-22
+
+### Changed
+- Notif Telegram disederhanakan — hanya: analisa, alert manual, dan entry (BUY/SELL)
+- Hapus notif saat pending order **dipasang** (spam)
+- Notif saat pending **filled** diubah formatnya menjadi notif entry biasa (`🟢 BUY / 🔴 SELL ENTRY`)
+
+---
+
 ## [2.0.4] — 2026-06-22
 
 ### Fixed
