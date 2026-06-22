@@ -5,6 +5,18 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.7] — 2026-06-22
+
+### Fixed
+- SL terlalu sempit — posisi langsung kena breakeven lalu close rugi kecil akibat spread
+  - `MAX_SL_POINTS`: 10 → **20 pip** (lebih aman dari noise XAUUSD yang bisa 10-20 pip per M5)
+  - `TP1_PIPS`: 15 → **20 pip** (RR 1:1)
+  - `TP2_PIPS`: 25 → **35 pip** (RR 1:1.75)
+  - `TP3_PIPS`: 40 → **55 pip**
+- Breakeven trigger di 50% TP1 = 10 pip, lebih reasonable setelah pelebaran SL/TP
+
+---
+
 ## [2.0.6] — 2026-06-22
 
 ### Changed
