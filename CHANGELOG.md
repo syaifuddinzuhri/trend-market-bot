@@ -5,6 +5,23 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.0] — 2026-06-22
+
+### Added
+- **Scalper Trend (`scalper_trend.py`)** — bot scalp terpisah, entry searah tren H1 di M5
+  - Filter tren H1: EMA50 vs EMA200 → tentukan arah SELL/BUY
+  - Entry saat muncul candle konfirmasi M5: Bearish/Bullish Pin Bar atau Engulfing
+  - Filter ADX M5 minimum (`TREND_ADX_MIN=20`)
+  - SL: swing high/low M5 10 bar, fallback ke fixed pip (`TREND_SL_PIPS=15`)
+  - TP: fixed pip (`TREND_TP_PIPS=12`)
+  - Max posisi bersamaan: `TREND_MAX_OPEN=3`
+  - Cooldown antar entry: `TREND_COOLDOWN=60` detik
+  - Magic number terpisah `TREND_MAGIC=202408` — tidak konflik dengan bot utama atau scalper grid
+  - Notif Telegram setiap entry
+  - Config via `.env`: `TREND_TP_PIPS`, `TREND_SL_PIPS`, `TREND_LOT`, `TREND_MAX_OPEN`, `TREND_COOLDOWN`, `TREND_ADX_MIN`, `TREND_MAGIC`
+
+---
+
 ## [1.9.5] — 2026-06-22
 
 ### Fixed
