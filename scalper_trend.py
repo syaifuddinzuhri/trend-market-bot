@@ -1,10 +1,14 @@
 """
-TrendBot Scalper Trend — M5 Candle Entry searah H1
+TrendBot Scalper Trend — M15/M5 Candle Entry
 
-Strategi:
-  1. Konfirmasi tren H1: EMA50 < EMA200 → SELL, EMA50 > EMA200 → BUY
-  2. Candle konfirmasi M5: Bearish Pin Bar atau Bearish Engulfing (untuk SELL)
-  3. Entry market order, TP fixed pip, SL swing high/low M5 + buffer
+Mode TREND (default):
+  - Filter tren H1: EMA50 vs EMA200 → entry satu arah
+  - Entry candle konfirmasi M5 searah tren
+
+Mode BOTH (TREND_BOTH_DIRECTIONS=true):
+  - Tidak ada filter tren — entry SELL dan BUY bergantian
+  - Candle konfirmasi M15: Pin Bar atau Engulfing ke arah manapun
+  - Cocok untuk pasar yang oscillate di M15 meski H1 trending
 
 Run: python scalper_trend.py
 """
@@ -20,14 +24,17 @@ from bot.session import is_trading_session
 from bot import telegram
 
 # ── Config scalper trend ──────────────────────────────────────────
-TREND_TP_PIPS    = float(__import__('os').getenv("TREND_TP_PIPS",   12.0))  # TP pip (10-15)
-TREND_SL_PIPS    = float(__import__('os').getenv("TREND_SL_PIPS",   15.0))  # SL pip
-TREND_LOT        = float(__import__('os').getenv("TREND_LOT",        0.01))  # lot per trade
-TREND_MAX_OPEN   = int(__import__('os').getenv("TREND_MAX_OPEN",       3))   # max posisi scalp
-TREND_COOLDOWN   = int(__import__('os').getenv("TREND_COOLDOWN",      60))   # detik antar entry
-TREND_MAGIC      = int(__import__('os').getenv("TREND_MAGIC",      202408))  # magic number
-TREND_ADX_MIN    = float(__import__('os').getenv("TREND_ADX_MIN",    20.0))  # ADX minimum M5
-CHECK_INTERVAL   = 5   # detik antar cycle
+import os as _os
+TREND_TP_PIPS         = float(_os.getenv("TREND_TP_PIPS",          15.0))  # TP pip
+TREND_SL_PIPS         = float(_os.getenv("TREND_SL_PIPS",          15.0))  # SL pip
+TREND_LOT             = float(_os.getenv("TREND_LOT",               0.01))  # lot per trade
+TREND_MAX_OPEN        = int(_os.getenv("TREND_MAX_OPEN",               3))  # max posisi
+TREND_COOLDOWN        = int(_os.getenv("TREND_COOLDOWN",              60))  # detik antar entry
+TREND_MAGIC           = int(_os.getenv("TREND_MAGIC",             202408))  # magic number
+TREND_ADX_MIN         = float(_os.getenv("TREND_ADX_MIN",           20.0))  # ADX minimum
+TREND_BOTH_DIRECTIONS = _os.getenv("TREND_BOTH_DIRECTIONS", "false").lower() == "true"
+TREND_ENTRY_TF        = _os.getenv("TREND_ENTRY_TF", "M15")  # "M5" atau "M15"
+CHECK_INTERVAL        = 5   # detik antar cycle
 
 _last_entry_time: float = 0.0
 
@@ -179,27 +186,49 @@ def _run_cycle():
     if not is_trading_session():
         return
 
-    # ── Trend H1 ──────────────────────────────────────────────────
-    direction = _get_trend_h1()
-    if not direction:
-        log_console("[STREND] Trend H1 tidak jelas — skip")
-        return
+    # ── Pilih timeframe entry ─────────────────────────────────────
+    tf     = mt5.TIMEFRAME_M15 if TREND_ENTRY_TF == "M15" else mt5.TIMEFRAME_M5
+    tf_lbl = TREND_ENTRY_TF
 
-    # ── Data M5 ───────────────────────────────────────────────────
-    df_m5 = _get_candles(mt5.TIMEFRAME_M5, 100)
-    if df_m5 is None:
-        return
+    # ── Mode: BOTH DIRECTIONS (M15 oscillation) ───────────────────
+    if TREND_BOTH_DIRECTIONS:
+        df = _get_candles(tf, 100)
+        if df is None:
+            return
+        adx = _get_adx_m5(df)
+        if adx < TREND_ADX_MIN:
+            log_console(f"[STREND] ADX {tf_lbl}={adx:.1f} < {TREND_ADX_MIN} — skip")
+            return
 
-    # ── ADX filter ────────────────────────────────────────────────
-    adx = _get_adx_m5(df_m5)
-    if adx < TREND_ADX_MIN:
-        log_console(f"[STREND] ADX M5={adx:.1f} < {TREND_ADX_MIN} — skip")
-        return
+        # Cari candle konfirmasi ke arah manapun
+        direction = None
+        pattern   = None
+        for d in ("SELL", "BUY"):
+            p = _check_candle(df, d)
+            if p:
+                direction = d
+                pattern   = p
+                break
 
-    # ── Candle konfirmasi ─────────────────────────────────────────
-    pattern = _check_candle(df_m5, direction)
-    if not pattern:
-        return
+        if not direction:
+            return
+
+    # ── Mode: TREND (satu arah sesuai H1) ────────────────────────
+    else:
+        direction = _get_trend_h1()
+        if not direction:
+            log_console("[STREND] Trend H1 tidak jelas — skip")
+            return
+        df = _get_candles(tf, 100)
+        if df is None:
+            return
+        adx = _get_adx_m5(df)
+        if adx < TREND_ADX_MIN:
+            log_console(f"[STREND] ADX {tf_lbl}={adx:.1f} < {TREND_ADX_MIN} — skip")
+            return
+        pattern = _check_candle(df, direction)
+        if not pattern:
+            return
 
     # ── Max posisi ────────────────────────────────────────────────
     if _open_count() >= TREND_MAX_OPEN:
@@ -219,10 +248,8 @@ def _run_cycle():
     sym_info = mt5.symbol_info(sc.SYMBOL)
     pip_size = max(sym_info.point * 10, 0.1) if sym_info else 0.1
 
-    entry = tick.bid if direction == "SELL" else tick.ask
-    sl    = _get_swing(df_m5, direction, lookback=10)
-
-    # Fallback ke fixed pip jika swing terlalu jauh
+    entry     = tick.bid if direction == "SELL" else tick.ask
+    sl        = _get_swing(df, direction, lookback=10)
     swing_dist = abs(entry - sl)
     max_sl_dist = TREND_SL_PIPS * pip_size
     if swing_dist > max_sl_dist or swing_dist < pip_size:
@@ -233,8 +260,9 @@ def _run_cycle():
     sl = round(sl, sym_info.digits if sym_info else 2)
     tp = round(tp, sym_info.digits if sym_info else 2)
 
+    mode_lbl = "BOTH" if TREND_BOTH_DIRECTIONS else "TREND"
     log_console(
-        f"[STREND] {direction} | {pattern} | ADX={adx:.1f} | "
+        f"[STREND/{mode_lbl}] {direction} | {pattern} | ADX={adx:.1f} [{tf_lbl}] | "
         f"Entry={entry:.2f} | SL={sl:.2f} | TP={tp:.2f}"
     )
 
@@ -243,12 +271,12 @@ def _run_cycle():
         _last_entry_time = time.time()
         sl_dist = abs(entry - sl)
         telegram.send(
-            f"⚡ *SCALP {direction} — {sc.SYMBOL}*\n"
+            f"⚡ *SCALP {direction} — {sc.SYMBOL}* [{mode_lbl}/{tf_lbl}]\n"
             f"Pattern : `{pattern}`\n"
             f"Entry   : `{entry:.2f}`\n"
             f"SL      : `{sl:.2f}` ({sl_dist:.2f})\n"
             f"TP      : `{tp:.2f}` ({tp_dist:.2f})\n"
-            f"Lot     : `{TREND_LOT}` | ADX M5: `{adx:.1f}`"
+            f"Lot     : `{TREND_LOT}` | ADX: `{adx:.1f}`"
         )
         log_console(f"[STREND] Opened ticket={ticket}")
 

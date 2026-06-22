@@ -5,6 +5,17 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.1] — 2026-06-22
+
+### Changed
+- `scalper_trend.py` — tambah mode **BOTH DIRECTIONS** untuk oscillation scalp di M15
+  - `TREND_BOTH_DIRECTIONS=true` → entry SELL dan BUY bergantian berdasarkan candle M15, tanpa filter tren H1
+  - `TREND_BOTH_DIRECTIONS=false` (default) → satu arah sesuai tren H1 (perilaku sebelumnya)
+  - `TREND_ENTRY_TF=M15` atau `M5` — pilih timeframe candle konfirmasi entry
+  - Label notif Telegram menampilkan mode: `[BOTH/M15]` atau `[TREND/M5]`
+
+---
+
 ## [2.0.0] — 2026-06-22
 
 ### Added
