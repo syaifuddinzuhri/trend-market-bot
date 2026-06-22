@@ -5,6 +5,19 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.6] — 2026-06-22
+
+### Changed
+- Konfigurasi disesuaikan untuk modal 1 juta IDR (1 pip ≈ 970 IDR @ lot 0.01)
+  - `MAX_SL_POINTS`: 30 → **10 pip** (~9,700 IDR ≈ 1% modal)
+  - `TP1_PIPS`: 50 → **15 pip** (RR 1:1.5)
+  - `TP2_PIPS`: 80 → **25 pip** (RR 1:2.5)
+  - `TP3_PIPS`: 120 → **40 pip**
+  - `TREND_SL_PIPS`: 15 → **10 pip**
+  - `TREND_TP_PIPS`: 15 → **12 pip**
+
+---
+
 ## [2.0.5] — 2026-06-22
 
 ### Changed
