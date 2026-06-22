@@ -176,15 +176,36 @@ def evaluate_pending(
     if pd.isna(atr_ma) or atr_val < atr_ma * config.ATR_MA_RATIO:
         return None
 
-    # Level pending = EMA20 H1 (area pullback target)
-    ema20 = last_h1.get("ema20", 0)
-    ema50 = last_h1.get("ema50", 0)
+    ema20  = last_h1.get("ema20",  0)
+    ema50  = last_h1.get("ema50",  0)
+    ema100 = last_h1.get("ema100", 0)
     if ema20 <= 0:
         return None
 
-    # Untuk SELL LIMIT: pasang di EMA20 H1 (harga pullback ke sana lalu reject)
-    # Untuk BUY LIMIT: pasang di EMA20 H1
-    level = ema20
+    # Ambil harga sekarang untuk validasi arah level
+    import MetaTrader5 as _mt5
+    tick = _mt5.symbol_info_tick(config.SYMBOL)
+    if tick is None:
+        return None
+    current = tick.ask if direction == "BUY" else tick.bid
+
+    # SELL LIMIT: level harus DI ATAS harga sekarang (harga naik ke sana lalu reject)
+    # BUY  LIMIT: level harus DI BAWAH harga sekarang (harga turun ke sana lalu bounce)
+    level = None
+    if direction == "SELL":
+        for candidate in [ema20, ema50, ema100]:
+            if candidate > 0 and candidate > current:
+                level = candidate
+                break
+    else:  # BUY
+        for candidate in [ema20, ema50, ema100]:
+            if candidate > 0 and candidate < current:
+                level = candidate
+                break
+
+    if level is None:
+        log_console(f"[PEND] Tidak ada level EMA yang valid untuk {direction} LIMIT (harga={current:.2f})")
+        return None
 
     return {
         "direction": direction,

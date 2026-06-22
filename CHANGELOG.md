@@ -5,6 +5,14 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.1] — 2026-06-22
+
+### Fixed
+- **Pending order level salah** — SELL LIMIT dipasang di bawah harga (tidak valid di MT5). Sekarang bot memilih EMA pertama yang VALID: untuk SELL LIMIT harus di atas harga, untuk BUY LIMIT harus di bawah harga. Urutan coba: EMA20 → EMA50 → EMA100 H1
+- Jika tidak ada EMA yang valid, bot log info dan tidak pasang pending
+
+---
+
 ## [1.5.0] — 2026-06-22
 
 ### Added
