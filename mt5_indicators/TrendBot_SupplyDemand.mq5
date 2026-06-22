@@ -18,11 +18,11 @@ input int    BaseBars         = 3;     // min bar konsolidasi (base)
 input double ImpulseBodyMult  = 2.5;   // body impulse >= N × rata-rata body base
 input int    MaxZones         = 30;    // max zona yang ditampilkan
 input bool   ShowMitigated    = false; // tampilkan zona yang sudah ditembus harga
-input color  DemandColor      = C'0,60,0';    // hijau gelap
-input color  SupplyColor      = C'80,0,0';    // merah gelap
-input color  DemandBorder     = clrLime;
-input color  SupplyBorder     = clrRed;
-input int    ZoneAlpha        = 60;    // transparansi kotak (0-255)
+input color  DemandColor      = C'0,20,0';    // hijau sangat gelap (transparan)
+input color  SupplyColor      = C'20,0,0';    // merah sangat gelap (transparan)
+input color  DemandBorder     = C'0,180,0';   // hijau border
+input color  SupplyBorder     = C'200,0,0';   // merah border
+input int    ZoneAlpha        = 60;    // tidak dipakai (MT5 tidak support alpha)
 input ENUM_LINE_STYLE BorderStyle = STYLE_SOLID;
 
 #define PREFIX "TBot_SD_"
@@ -174,8 +174,9 @@ void _DrawZone(string name, datetime t_start,
    ObjectSetInteger(0, rect_name, OBJPROP_STYLE,     BorderStyle);
    ObjectSetInteger(0, rect_name, OBJPROP_WIDTH,     1);
    ObjectSetInteger(0, rect_name, OBJPROP_FILL,      true);
-   ObjectSetInteger(0, rect_name, OBJPROP_BACK,      true);
+   ObjectSetInteger(0, rect_name, OBJPROP_BACK,      true);   // selalu di belakang candle
    ObjectSetInteger(0, rect_name, OBJPROP_BGCOLOR,   fill);
+   ObjectSetInteger(0, rect_name, OBJPROP_HIDDEN,    true);
    ObjectSetString(0,  rect_name, OBJPROP_TOOLTIP,   label + " | " +
                    DoubleToString(top, _Digits) + " — " + DoubleToString(bottom, _Digits));
    ObjectSetInteger(0, rect_name, OBJPROP_SELECTABLE,false);
