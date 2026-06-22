@@ -5,6 +5,13 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.4] — 2026-06-22
+
+### Fixed
+- Cooldown pending order tidak reset meski pending sudah cancel/expired — bot stuck cooldown meski tidak ada order aktif. Sekarang cooldown otomatis direset jika `get_pending_count() == 0`
+
+---
+
 ## [2.0.3] — 2026-06-22
 
 ### Fixed

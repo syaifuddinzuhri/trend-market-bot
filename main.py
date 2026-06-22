@@ -396,6 +396,10 @@ def _run_signal_cycle():
 
         # Tidak ada market signal → coba pasang pending limit jika diaktifkan
         if config.PENDING_ENABLED and trade.get_pending_count(config.SYMBOL) == 0:
+            # Reset cooldown jika tidak ada pending aktif — pending sudah cancel/expired
+            if _last_pending_placed > 0 and (time.time() - _last_pending_placed) < PENDING_COOLDOWN:
+                _last_pending_placed = 0.0
+                log_console("[PEND] Cooldown direset — tidak ada pending aktif")
             elapsed = time.time() - _last_pending_placed
             if elapsed < PENDING_COOLDOWN:
                 log_console(f"[PEND] Cooldown {int(PENDING_COOLDOWN - elapsed)}s — skip")
