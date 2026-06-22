@@ -25,8 +25,10 @@ ANALYSIS_INTERVAL     = 1800   # detik antara analisa Telegram (30 menit)
 
 # Ticket yang dibuka bot session ini
 _open_tickets: set[int] = set()
-_last_signal_check = 0.0
+_last_signal_check  = 0.0
 _last_analysis_sent = 0.0
+_last_pending_placed = 0.0   # epoch seconds saat terakhir pasang pending
+PENDING_COOLDOWN = 300        # 5 menit cooldown antar pending placement
 
 # Daily trade counter (hanya posisi induk, bukan pyramid)
 _trades_today: int = 0
@@ -370,9 +372,14 @@ def _run_signal_cycle():
 
         # Tidak ada market signal → coba pasang pending limit jika diaktifkan
         if config.PENDING_ENABLED and trade.get_pending_count(config.SYMBOL) == 0:
-            pend = signals.evaluate_pending(df_h4, df_h1)
-            if pend:
-                _place_pending(pend, df_h1, df_m5=df_m5)
+            elapsed = time.time() - _last_pending_placed
+            if elapsed < PENDING_COOLDOWN:
+                log_console(f"[PEND] Cooldown {int(PENDING_COOLDOWN - elapsed)}s — skip")
+            else:
+                pend = signals.evaluate_pending(df_h4, df_h1)
+                if pend:
+                    if _place_pending(pend, df_h1, df_m5=df_m5):
+                        _last_pending_placed = time.time()
         return
 
     # ── KASUS 2: Ada posisi, belum capai MAX → cari CONTINUATION ─
@@ -405,7 +412,7 @@ def main():
     telegram.send("🤖 *TrendBot v1.2 started* | XAUUSD")
     calendar_refresh()
 
-    global _last_signal_check, _last_analysis_sent
+    global _last_signal_check, _last_analysis_sent, _last_pending_placed
     last_heartbeat        = 0.0
     last_calendar_refresh = 0.0
     CALENDAR_REFRESH_INTERVAL = 6 * 3600
