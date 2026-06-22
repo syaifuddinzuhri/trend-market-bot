@@ -38,7 +38,7 @@ int OnInit()
 
    IndicatorSetString(INDICATOR_SHORTNAME, "TrendBot Dashboard");
    EventSetTimer(5); // update setiap 5 detik (sama dengan heartbeat bot)
-   _DrawPanel();
+   _UpdatePanel();
    return INIT_SUCCEEDED;
 }
 
