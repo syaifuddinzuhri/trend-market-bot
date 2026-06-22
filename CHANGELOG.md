@@ -5,6 +5,14 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.3] — 2026-06-22
+
+### Changed
+- `ALERT_COOLDOWN_SECONDS` dipindah ke `.env` — bisa diubah tanpa restart bot (default 300 detik)
+- Set `ALERT_COOLDOWN_SECONDS=0` di `.env` lalu restart untuk reset cooldown instan
+
+---
+
 ## [1.9.2] — 2026-06-22
 
 ### Fixed

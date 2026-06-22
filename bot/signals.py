@@ -30,7 +30,6 @@ _ADX_CHOCH_BONUS = 5
 # Throttle alert manual — cegah spam Telegram tiap 5 detik
 # Key: (symbol, direction, passed) → epoch seconds terakhir kirim
 _alert_sent_at: dict[tuple, float] = {}
-ALERT_COOLDOWN_SECONDS = 300   # kirim ulang paling cepat 5 menit
 ALERT_MIN_FILTERS = 6          # kirim jika lolos >= N filter
 
 
@@ -156,7 +155,7 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
         key = (config.SYMBOL, direction, passed)
         now = _t.time()
         last = _alert_sent_at.get(key, 0)
-        if now - last >= ALERT_COOLDOWN_SECONDS:
+        if now - last >= config.ALERT_COOLDOWN_SECONDS:
             try:
                 from bot.risk import calc_sl
                 tick = mt5.symbol_info_tick(config.SYMBOL)
