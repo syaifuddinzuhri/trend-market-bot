@@ -1,28 +1,32 @@
 //+------------------------------------------------------------------+
 //| TrendBot_SupplyDemand.mq5                                        |
-//| Supply & Demand zone otomatis — pola Base + Impulse              |
+//| Supply & Demand zone otomatis — Rally/Drop Base Rally/Drop       |
 //|                                                                  |
-//| Logika deteksi:                                                  |
-//|  DEMAND zone: candle impulse bullish besar keluar dari base      |
-//|               (beberapa candle kecil konsolidasi)               |
-//|  SUPPLY zone: candle impulse bearish besar keluar dari base      |
+//| Pattern:                                                         |
+//|  SUPPLY : Rally → Base (konsolidasi) → Drop besar               |
+//|  DEMAND : Drop  → Base (konsolidasi) → Rally besar              |
 //|                                                                  |
-//| Pasang di H1 atau M15                                           |
+//| Bisa tampilkan banyak zona sekaligus (MaxZones)                 |
 //+------------------------------------------------------------------+
 #property indicator_chart_window
 #property indicator_buffers 0
 #property indicator_plots   0
 
-input int    LookbackBars     = 300;   // bar historis yang di-scan
-input int    BaseBars         = 3;     // min bar konsolidasi (base)
-input double ImpulseBodyMult  = 2.5;   // body impulse >= N × rata-rata body base
-input int    MaxZones         = 30;    // max zona yang ditampilkan
-input bool   ShowMitigated    = false; // tampilkan zona yang sudah ditembus harga
-input color  DemandColor      = C'0,20,0';    // hijau sangat gelap (transparan)
-input color  SupplyColor      = C'20,0,0';    // merah sangat gelap (transparan)
-input color  DemandBorder     = C'0,180,0';   // hijau border
-input color  SupplyBorder     = C'200,0,0';   // merah border
-input int    ZoneAlpha        = 60;    // tidak dipakai (MT5 tidak support alpha)
+input int    LookbackBars     = 500;   // bar historis yang di-scan
+input int    BaseBarsMin      = 1;     // min bar konsolidasi
+input int    BaseBarsMax      = 6;     // max bar konsolidasi
+input double ImpulseBodyRatio = 0.50;  // body/range impulse minimum
+input double ImpulseBodyMult  = 1.5;   // body impulse >= N × rata-rata body base
+input int    MaxZones         = 10;    // max zona per tipe (supply & demand masing-masing)
+input bool   ShowMitigated    = true;  // tampilkan zona yang sudah ditembus (lebih gelap)
+input color  DemandColor      = C'0,30,0';    // fill hijau gelap
+input color  SupplyColor      = C'30,0,0';    // fill merah gelap
+input color  DemandColorUsed  = C'0,10,0';    // fill hijau sangat gelap (mitigated)
+input color  SupplyColorUsed  = C'10,0,0';    // fill merah sangat gelap (mitigated)
+input color  DemandBorder     = C'0,200,0';   // border hijau
+input color  SupplyBorder     = C'220,0,0';   // border merah
+input color  DemandBorderUsed = C'0,100,0';   // border hijau redup (mitigated)
+input color  SupplyBorderUsed = C'120,0,0';   // border merah redup (mitigated)
 input ENUM_LINE_STYLE BorderStyle = STYLE_SOLID;
 
 #define PREFIX "TBot_SD_"
@@ -33,7 +37,6 @@ struct SDZone
    double   top;
    double   bottom;
    datetime time_start;
-   datetime time_end;
    bool     is_demand;
    bool     mitigated;
 };
@@ -44,7 +47,7 @@ int    zone_count = 0;
 int OnInit()
 {
    IndicatorSetString(INDICATOR_SHORTNAME, "TrendBot S&D");
-   ArrayResize(zones, MaxZones);
+   ArrayResize(zones, MaxZones * 2);
    return INIT_SUCCEEDED;
 }
 
@@ -53,173 +56,248 @@ int OnCalculate(const int rates_total, const int prev_calculated,
                 const double &high[], const double &low[], const double &close[],
                 const long &tick_volume[], const long &volume[], const int &spread[])
 {
-   if (rates_total < LookbackBars + BaseBars + 2) return rates_total;
+   if (rates_total < LookbackBars + BaseBarsMax + 3) return rates_total;
 
-   // Full recalc hanya jika belum ada zone atau bar baru masuk
    if (prev_calculated == 0 || zone_count == 0)
    {
       _DeleteAllZones();
       zone_count = 0;
       _ScanZones(rates_total, time, open, high, low, close);
+      _DrawAllZones(time);
    }
    else
    {
-      // Update mitigasi saja
       _CheckMitigation(close[rates_total - 1]);
+      _RefreshZoneEndTime();
    }
 
    return rates_total;
 }
 
+//───────────────────────────────────────────────────────────────────
+// Scan: cari pola Base + Impulse dari kiri ke kanan
+//───────────────────────────────────────────────────────────────────
 void _ScanZones(const int total, const datetime &time[],
                 const double &open[], const double &high[],
                 const double &low[], const double &close[])
 {
-   int start = MathMax(BaseBars + 2, total - LookbackBars);
+   int demand_count = 0;
+   int supply_count = 0;
 
-   for (int i = start; i < total - 1 && zone_count < MaxZones; i++)
+   int start = MathMax(BaseBarsMax + 3, total - LookbackBars);
+
+   for (int i = start; i < total - 1; i++)
    {
-      // ── Hitung body candle i ─────────────────────────────────
-      double body_i = MathAbs(close[i] - open[i]);
-      double range_i = high[i] - low[i];
-      if (range_i == 0) continue;
+      if (demand_count >= MaxZones && supply_count >= MaxZones) break;
 
-      // Cek apakah candle i adalah impulse (body besar)
-      bool bull_impulse = close[i] > open[i] && body_i / range_i >= 0.6;
-      bool bear_impulse = close[i] < open[i] && body_i / range_i >= 0.6;
-      if (!bull_impulse && !bear_impulse) continue;
+      // ── Candle impulse (candle i+1 setelah base) ─────────────
+      int imp = i;
+      double body_imp  = MathAbs(close[imp] - open[imp]);
+      double range_imp = high[imp] - low[imp];
+      if (range_imp < _Point * 5) continue;
 
-      // ── Cari base sebelum impulse (BaseBars candle ke kiri) ──
-      int base_start = -1, base_end = i - 1;
+      bool bull_imp = close[imp] > open[imp] && body_imp / range_imp >= ImpulseBodyRatio;
+      bool bear_imp = close[imp] < open[imp] && body_imp / range_imp >= ImpulseBodyRatio;
+      if (!bull_imp && !bear_imp) continue;
+
+      // ── Cari base sebelum impulse ─────────────────────────────
+      int    base_end   = imp - 1;
+      int    base_start = -1;
       double base_body_sum = 0;
       int    base_count    = 0;
 
-      for (int b = i - 1; b >= MathMax(0, i - BaseBars - 4) && base_count < BaseBars + 3; b--)
+      for (int b = base_end; b >= MathMax(0, imp - BaseBarsMax - 1) && base_count <= BaseBarsMax; b--)
       {
          double body_b  = MathAbs(close[b] - open[b]);
          double range_b = high[b] - low[b];
-         if (range_b == 0) continue;
+         if (range_b < _Point * 2) continue;
 
-         // Base candle: body kecil (konsolidasi)
-         if (body_b / range_b <= 0.55)
+         double ratio_b = (range_b > 0) ? body_b / range_b : 0;
+
+         // Base: body relatif kecil dibanding range (konsolidasi/doji/small candle)
+         if (ratio_b <= 0.70)
          {
             base_body_sum += body_b;
             base_count++;
             base_start = b;
          }
-         else break; // keluar jika ketemu candle besar
+         else
+         {
+            if (base_count >= BaseBarsMin) break; // cukup base, stop
+            else { base_count = 0; base_body_sum = 0; base_start = -1; } // reset
+         }
       }
 
-      if (base_count < BaseBars) continue;
+      if (base_count < BaseBarsMin || base_start < 0) continue;
 
-      double avg_base_body = base_body_sum / base_count;
-      if (avg_base_body == 0) continue;
-      if (body_i < avg_base_body * ImpulseBodyMult) continue;
+      double avg_base_body = (base_count > 0) ? base_body_sum / base_count : 0;
+      if (avg_base_body < _Point) avg_base_body = _Point * 3; // fallback untuk doji
 
-      // ── Tentukan zona (top & bottom dari range base) ──────────
-      double zone_top = -DBL_MAX, zone_bottom = DBL_MAX;
+      // Impulse harus lebih besar dari base
+      if (body_imp < avg_base_body * ImpulseBodyMult) continue;
+
+      // ── Zona = range seluruh base candle ─────────────────────
+      double zone_top    = -DBL_MAX;
+      double zone_bottom =  DBL_MAX;
       for (int b = base_start; b <= base_end; b++)
       {
          if (high[b] > zone_top)    zone_top    = high[b];
          if (low[b]  < zone_bottom) zone_bottom = low[b];
       }
 
-      bool is_demand = bull_impulse;
+      if (zone_top <= zone_bottom) continue;
+      if (zone_top - zone_bottom < _Point * 2) continue;
 
-      // ── Cek mitigation (harga pernah kembali ke zona) ─────────
-      bool mitigated = false;
-      for (int k = i + 1; k < total; k++)
+      bool is_demand = bull_imp;
+
+      // Skip jika kuota penuh untuk tipe ini
+      if (is_demand && demand_count >= MaxZones) continue;
+      if (!is_demand && supply_count >= MaxZones) continue;
+
+      // ── Cek duplikat (zona tumpang tindih) ───────────────────
+      bool duplicate = false;
+      for (int z = 0; z < zone_count; z++)
       {
-         if (is_demand && low[k] <= zone_top)    { mitigated = true; break; }
-         if (!is_demand && high[k] >= zone_bottom){ mitigated = true; break; }
+         if (zones[z].is_demand != is_demand) continue;
+         double overlap_top    = MathMin(zones[z].top,    zone_top);
+         double overlap_bottom = MathMax(zones[z].bottom, zone_bottom);
+         if (overlap_top > overlap_bottom) { duplicate = true; break; }
+      }
+      if (duplicate) continue;
+
+      // ── Cek mitigation ────────────────────────────────────────
+      bool mitigated = false;
+      for (int k = imp + 1; k < total; k++)
+      {
+         if (is_demand && low[k]  <= zone_bottom) { mitigated = true; break; }
+         if (!is_demand && high[k] >= zone_top)   { mitigated = true; break; }
       }
 
       if (mitigated && !ShowMitigated) continue;
 
-      // ── Simpan & gambar zona ───────────────────────────────────
-      string name = PREFIX + (is_demand ? "D_" : "S_") + IntegerToString(i);
-      zones[zone_count].name       = name;
-      zones[zone_count].top        = zone_top;
-      zones[zone_count].bottom     = zone_bottom;
-      zones[zone_count].time_start = time[base_start];
-      zones[zone_count].time_end   = 0; // extend ke kanan
-      zones[zone_count].is_demand  = is_demand;
-      zones[zone_count].mitigated  = mitigated;
-      zone_count++;
+      // ── Simpan zona ───────────────────────────────────────────
+      string name = PREFIX + (is_demand ? "D_" : "S_") + IntegerToString(base_start);
+      if (zone_count < ArraySize(zones))
+      {
+         zones[zone_count].name       = name;
+         zones[zone_count].top        = zone_top;
+         zones[zone_count].bottom     = zone_bottom;
+         zones[zone_count].time_start = time[base_start];
+         zones[zone_count].is_demand  = is_demand;
+         zones[zone_count].mitigated  = mitigated;
+         zone_count++;
 
-      _DrawZone(name, time[base_start], zone_top, zone_bottom, is_demand, mitigated);
+         if (is_demand) demand_count++;
+         else           supply_count++;
+      }
    }
+
+   PrintFormat("[S&D] Scan selesai: %d zona ditemukan (%d demand, %d supply)",
+               zone_count, demand_count, supply_count);
 }
 
-void _DrawZone(string name, datetime t_start,
-               double top, double bottom,
-               bool is_demand, bool mitigated)
+//───────────────────────────────────────────────────────────────────
+// Gambar semua zona
+//───────────────────────────────────────────────────────────────────
+void _DrawAllZones(const datetime &time[])
 {
-   color fill   = is_demand ? DemandColor  : SupplyColor;
-   color border = is_demand ? DemandBorder : SupplyBorder;
-   string label = is_demand ? "Demand" : "Supply";
-
-   if (mitigated)
-   {
-      fill   = clrDimGray;
-      border = clrGray;
-      label += " (used)";
-   }
-
-   // Kotak zona
-   string rect_name = name + "_rect";
-   if (ObjectFind(0, rect_name) < 0)
-      ObjectCreate(0, rect_name, OBJ_RECTANGLE, 0, t_start, top, TimeCurrent() + 86400 * 30, bottom);
-   ObjectSetInteger(0, rect_name, OBJPROP_COLOR,     border);
-   ObjectSetInteger(0, rect_name, OBJPROP_STYLE,     BorderStyle);
-   ObjectSetInteger(0, rect_name, OBJPROP_WIDTH,     1);
-   ObjectSetInteger(0, rect_name, OBJPROP_FILL,      true);
-   ObjectSetInteger(0, rect_name, OBJPROP_BACK,      true);   // selalu di belakang candle
-   ObjectSetInteger(0, rect_name, OBJPROP_BGCOLOR,   fill);
-   ObjectSetInteger(0, rect_name, OBJPROP_HIDDEN,    true);
-   ObjectSetString(0,  rect_name, OBJPROP_TOOLTIP,   label + " | " +
-                   DoubleToString(top, _Digits) + " — " + DoubleToString(bottom, _Digits));
-   ObjectSetInteger(0, rect_name, OBJPROP_SELECTABLE,false);
-   ObjectSetInteger(0, rect_name, OBJPROP_TIME,  0, t_start);
-   ObjectSetDouble(0,  rect_name, OBJPROP_PRICE, 0, top);
-   ObjectSetInteger(0, rect_name, OBJPROP_TIME,  1, TimeCurrent() + 86400 * 30);
-   ObjectSetDouble(0,  rect_name, OBJPROP_PRICE, 1, bottom);
-
-   // Label teks di tepi kiri zona
-   string lbl_name = name + "_lbl";
-   if (ObjectFind(0, lbl_name) < 0)
-      ObjectCreate(0, lbl_name, OBJ_TEXT, 0, t_start, top);
-   ObjectSetString(0,  lbl_name, OBJPROP_TEXT,     " " + label);
-   ObjectSetInteger(0, lbl_name, OBJPROP_COLOR,    border);
-   ObjectSetInteger(0, lbl_name, OBJPROP_FONTSIZE, 8);
-   ObjectSetString(0,  lbl_name, OBJPROP_FONT,     "Arial Bold");
-   ObjectSetInteger(0, lbl_name, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, lbl_name, OBJPROP_BACK,     false);
+   for (int z = 0; z < zone_count; z++)
+      _DrawZone(zones[z]);
 }
 
+void _DrawZone(SDZone &z)
+{
+   color fill, border;
+   string label;
+
+   if (z.is_demand)
+   {
+      fill   = z.mitigated ? DemandColorUsed : DemandColor;
+      border = z.mitigated ? DemandBorderUsed : DemandBorder;
+      label  = z.mitigated ? "Demand (used)" : "Demand";
+   }
+   else
+   {
+      fill   = z.mitigated ? SupplyColorUsed : SupplyColor;
+      border = z.mitigated ? SupplyBorderUsed : SupplyBorder;
+      label  = z.mitigated ? "Supply (used)" : "Supply";
+   }
+
+   datetime t_end = TimeCurrent() + 86400 * 30;
+
+   // Kotak
+   string rect = z.name + "_rect";
+   if (ObjectFind(0, rect) < 0)
+      ObjectCreate(0, rect, OBJ_RECTANGLE, 0, z.time_start, z.top, t_end, z.bottom);
+   ObjectSetInteger(0, rect, OBJPROP_COLOR,      border);
+   ObjectSetInteger(0, rect, OBJPROP_STYLE,      BorderStyle);
+   ObjectSetInteger(0, rect, OBJPROP_WIDTH,      1);
+   ObjectSetInteger(0, rect, OBJPROP_FILL,       true);
+   ObjectSetInteger(0, rect, OBJPROP_BACK,       true);
+   ObjectSetInteger(0, rect, OBJPROP_BGCOLOR,    fill);
+   ObjectSetInteger(0, rect, OBJPROP_HIDDEN,     true);
+   ObjectSetInteger(0, rect, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, rect, OBJPROP_TIME,  0, z.time_start);
+   ObjectSetDouble(0,  rect, OBJPROP_PRICE, 0, z.top);
+   ObjectSetInteger(0, rect, OBJPROP_TIME,  1, t_end);
+   ObjectSetDouble(0,  rect, OBJPROP_PRICE, 1, z.bottom);
+   ObjectSetString(0,  rect, OBJPROP_TOOLTIP,
+                   label + " | " + DoubleToString(z.top, _Digits) +
+                   " — " + DoubleToString(z.bottom, _Digits));
+
+   // Label
+   string lbl = z.name + "_lbl";
+   if (ObjectFind(0, lbl) < 0)
+      ObjectCreate(0, lbl, OBJ_TEXT, 0, z.time_start, z.top);
+   ObjectSetString(0,  lbl, OBJPROP_TEXT,      " " + label);
+   ObjectSetInteger(0, lbl, OBJPROP_COLOR,     border);
+   ObjectSetInteger(0, lbl, OBJPROP_FONTSIZE,  8);
+   ObjectSetString(0,  lbl, OBJPROP_FONT,      "Arial Bold");
+   ObjectSetInteger(0, lbl, OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0, lbl, OBJPROP_BACK,      false);
+}
+
+//───────────────────────────────────────────────────────────────────
+// Update: cek mitigation & perpanjang kotak ke kanan
+//───────────────────────────────────────────────────────────────────
 void _CheckMitigation(double current_price)
 {
    for (int z = 0; z < zone_count; z++)
    {
       if (zones[z].mitigated) continue;
+
       bool hit = zones[z].is_demand
-                 ? current_price <= zones[z].top
-                 : current_price >= zones[z].bottom;
-      if (hit)
+                 ? current_price <= zones[z].bottom
+                 : current_price >= zones[z].top;
+      if (!hit) continue;
+
+      zones[z].mitigated = true;
+
+      if (!ShowMitigated)
       {
-         zones[z].mitigated = true;
-         if (!ShowMitigated)
-         {
-            ObjectDelete(0, zones[z].name + "_rect");
-            ObjectDelete(0, zones[z].name + "_lbl");
-         }
-         else
-         {
-            // Ubah warna jadi abu
-            ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_COLOR,   clrGray);
-            ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_BGCOLOR, clrDimGray);
-         }
+         ObjectDelete(0, zones[z].name + "_rect");
+         ObjectDelete(0, zones[z].name + "_lbl");
       }
+      else
+      {
+         color fill   = zones[z].is_demand ? DemandColorUsed : SupplyColorUsed;
+         color border = zones[z].is_demand ? DemandBorderUsed : SupplyBorderUsed;
+         string label = zones[z].is_demand ? "Demand (used)" : "Supply (used)";
+         ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_BGCOLOR, fill);
+         ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_COLOR,   border);
+         ObjectSetString(0,  zones[z].name + "_lbl",  OBJPROP_TEXT,    " " + label);
+         ObjectSetInteger(0, zones[z].name + "_lbl",  OBJPROP_COLOR,   border);
+      }
+   }
+}
+
+void _RefreshZoneEndTime()
+{
+   datetime t_end = TimeCurrent() + 86400 * 30;
+   for (int z = 0; z < zone_count; z++)
+   {
+      if (!zones[z].mitigated || ShowMitigated)
+         ObjectSetInteger(0, zones[z].name + "_rect", OBJPROP_TIME, 1, t_end);
    }
 }
 
