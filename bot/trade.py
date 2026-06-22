@@ -515,17 +515,36 @@ def manage_pending_orders(symbol: str, direction_valid: str | None):
     all_orders = mt5.orders_get(symbol=symbol) or []
     bot_orders = [o for o in all_orders if o.magic == config.MAGIC_NUMBER and o.type in pending_types]
 
-    if not bot_orders:
-        # Bersihkan _pending_state jika tidak ada di MT5
-        _pending_state.clear()
-        return
-
-    # Sync _pending_state: hapus tiket yang sudah tidak ada di MT5
+    # Sync _pending_state: hapus tiket yang sudah tidak ada di MT5 (filled atau expired)
     mt5_tickets = {o.ticket for o in bot_orders}
+    open_tickets = {p.ticket for p in (mt5.positions_get(symbol=symbol) or [])}
     for ticket in list(_pending_state.keys()):
         if ticket not in mt5_tickets:
-            log_console(f"[PEND] ticket={ticket} sudah tidak aktif (filled/expired)")
-            _pending_state.pop(ticket, None)
+            state = _pending_state.pop(ticket, {})
+            if ticket in open_tickets:
+                # Pending FILLED → posisi terbuka → kirim notif
+                log_console(f"[PEND] ticket={ticket} FILLED → posisi terbuka")
+                direction = state.get("direction", "?")
+                level = state.get("level", 0.0)
+                sl = state.get("sl", 0.0)
+                tp = state.get("tp", 0.0)
+                lot = state.get("lot", 0.0)
+                sl_dist = abs(level - sl)
+                tp1 = (level + sl_dist * config.TP1_R if direction == "BUY"
+                       else level - sl_dist * config.TP1_R)
+                telegram.send(
+                    f"✅ *LIMIT FILLED {direction} — {symbol}*\n"
+                    f"Entry : `{level:.3f}`\n"
+                    f"SL    : `{sl:.3f}` ({sl_dist:.3f})\n"
+                    f"TP1   : `{tp1:.3f}`\n"
+                    f"TP2   : `{tp:.3f}`\n"
+                    f"Lot   : `{lot}`"
+                )
+            else:
+                log_console(f"[PEND] ticket={ticket} expired/cancelled")
+
+    if not bot_orders:
+        return
 
     tick = mt5.symbol_info_tick(symbol)
     current_price = tick.bid if tick else 0

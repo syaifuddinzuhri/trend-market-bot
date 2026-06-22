@@ -5,6 +5,13 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.5] — 2026-06-22
+
+### Added
+- **Notifikasi LIMIT FILLED** — ketika pending order ter-fill (masuk posisi), bot kirim notif Telegram `✅ LIMIT FILLED BUY/SELL` dengan Entry/SL/TP1/TP2/Lot. Sebelumnya tidak ada notif sama sekali saat pending order jadi market order.
+
+---
+
 ## [1.5.4] — 2026-06-22
 
 ### Fixed
