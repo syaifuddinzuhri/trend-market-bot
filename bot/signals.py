@@ -104,7 +104,7 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
         f"Session{_ok(session_ok)} News{_ok(news_ok)} | "
         f"Trend{_ok(trend_ok)} | "
         f"ADX={adx_val:.1f}{_ok(adx_ok)} "
-        f"ATR={atr_val:.2f}{_ok(atr_ok)} | "
+        f"ATR={atr_val:.2f}/MA={atr_ma_val:.2f}{_ok(atr_ok)} | "
         f"Pullback{_ok(pullback_ok)} | "
         f"Struct={struct_short}{_ok(struct_ok)} | "
         f"Candle={candle_short}{_ok(candle_ok)} → {status}"

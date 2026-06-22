@@ -5,6 +5,13 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.2] — 2026-06-22
+
+### Changed
+- **scan_log** tampilkan ATR_MA di samping ATR: `ATR=19.76/MA=23.10❌` agar mudah debug kenapa filter gagal
+
+---
+
 ## [1.4.1] — 2026-06-22
 
 ### Changed
