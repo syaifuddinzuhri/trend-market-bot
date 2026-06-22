@@ -270,9 +270,9 @@ void _RenderLines(string &lines[], color status_clr, int passed)
       if (ObjectFind(0, name) < 0)
       {
          ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
-         ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+         ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
          ObjectSetInteger(0, name, OBJPROP_XDISTANCE, PanelX);
-         ObjectSetInteger(0, name, OBJPROP_YDISTANCE, PanelY + i * 16);
+         ObjectSetInteger(0, name, OBJPROP_YDISTANCE, PanelY + (n - 1 - i) * 16);
          ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
          ObjectSetString(0, name, OBJPROP_FONT, "Courier New");
          ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
