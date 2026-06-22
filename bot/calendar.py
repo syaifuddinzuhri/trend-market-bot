@@ -25,10 +25,13 @@ HIGH_IMPACT_KEYWORDS = [
     "FOMC", "Federal Funds Rate", "Fed",
     "Non-Farm", "NFP",
     "CPI", "Consumer Price Index",
+    "PCE", "Core PCE",
     "PPI", "GDP",
     "Unemployment",
     "Interest Rate",
     "Jackson Hole",
+    "Retail Sales",
+    "ISM",
 ]
 
 WIB = timezone(timedelta(hours=7))
