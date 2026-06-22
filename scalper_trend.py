@@ -22,6 +22,7 @@ import scalp_config as sc
 from bot.logger import log_console
 from bot.session import is_trading_session
 from bot import telegram
+from scalp.zones import find_sd_zones, price_at_zone
 
 # ── Config scalper trend ──────────────────────────────────────────
 import os as _os
@@ -33,7 +34,10 @@ TREND_COOLDOWN        = int(_os.getenv("TREND_COOLDOWN",              60))  # de
 TREND_MAGIC           = int(_os.getenv("TREND_MAGIC",             202408))  # magic number
 TREND_ADX_MIN         = float(_os.getenv("TREND_ADX_MIN",           20.0))  # ADX minimum
 TREND_BOTH_DIRECTIONS = _os.getenv("TREND_BOTH_DIRECTIONS", "false").lower() == "true"
-TREND_ENTRY_TF        = _os.getenv("TREND_ENTRY_TF", "M15")  # "M5" atau "M15"
+TREND_ENTRY_TF        = _os.getenv("TREND_ENTRY_TF", "M15")   # "M5" atau "M15"
+TREND_USE_ZONES       = _os.getenv("TREND_USE_ZONES", "true").lower() == "true"   # filter S&D zone
+TREND_ZONE_TOLERANCE  = float(_os.getenv("TREND_ZONE_TOLERANCE", 0.5))  # buffer masuk zona (harga)
+TREND_ZONE_LOOKBACK   = int(_os.getenv("TREND_ZONE_LOOKBACK", 100))     # bar M15 untuk scan zona
 CHECK_INTERVAL        = 5   # detik antar cycle
 
 _last_entry_time: float = 0.0
@@ -230,6 +234,25 @@ def _run_cycle():
         if not pattern:
             return
 
+    # ── Filter S&D Zone ───────────────────────────────────────────
+    zone_hit = None
+    if TREND_USE_ZONES:
+        tf_zone = mt5.TIMEFRAME_M15 if TREND_ENTRY_TF == "M15" else mt5.TIMEFRAME_M5
+        df_zone = _get_candles(tf_zone, TREND_ZONE_LOOKBACK + 20)
+        if df_zone is not None:
+            tick_now = mt5.symbol_info_tick(sc.SYMBOL)
+            price_now = tick_now.bid if direction == "SELL" else tick_now.ask if tick_now else 0
+            zones = find_sd_zones(df_zone.tail(TREND_ZONE_LOOKBACK))
+            zone_hit = price_at_zone(zones, price_now, direction, tolerance=TREND_ZONE_TOLERANCE)
+            if zone_hit is None:
+                log_console(
+                    f"[STREND] {direction} candle ada tapi harga tidak di zona S&D — skip"
+                )
+                return
+            log_console(
+                f"[STREND] Zona {zone_hit['type']} {zone_hit['bottom']:.2f}–{zone_hit['top']:.2f} ✅"
+            )
+
     # ── Max posisi ────────────────────────────────────────────────
     if _open_count() >= TREND_MAX_OPEN:
         log_console(f"[STREND] Max posisi ({TREND_MAX_OPEN}) — skip")
@@ -270,6 +293,10 @@ def _run_cycle():
     if ticket:
         _last_entry_time = time.time()
         sl_dist = abs(entry - sl)
+        zone_str = (
+            f"\nZona    : `{zone_hit['type']} {zone_hit['bottom']:.2f}–{zone_hit['top']:.2f}`"
+            if zone_hit else ""
+        )
         telegram.send(
             f"⚡ *SCALP {direction} — {sc.SYMBOL}* [{mode_lbl}/{tf_lbl}]\n"
             f"Pattern : `{pattern}`\n"
@@ -277,6 +304,7 @@ def _run_cycle():
             f"SL      : `{sl:.2f}` ({sl_dist:.2f})\n"
             f"TP      : `{tp:.2f}` ({tp_dist:.2f})\n"
             f"Lot     : `{TREND_LOT}` | ADX: `{adx:.1f}`"
+            f"{zone_str}"
         )
         log_console(f"[STREND] Opened ticket={ticket}")
 

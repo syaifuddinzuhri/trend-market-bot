@@ -5,6 +5,21 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.2] — 2026-06-22
+
+### Added
+- **S&D Zone filter di `scalper_trend.py`** — entry hanya jika harga berada di dalam zona Supply/Demand
+  - Supply zone → candle bearish → SELL
+  - Demand zone → candle bullish → BUY
+  - Zona dideteksi dari M15 (100 bar lookback)
+  - `TREND_USE_ZONES=true` (default aktif)
+  - `TREND_ZONE_TOLERANCE=0.5` — buffer masuk zona dalam satuan harga
+  - `TREND_ZONE_LOOKBACK=100` — jumlah bar M15 untuk scan zona
+  - Info zona tampil di notif Telegram: `supply 4205.20–4207.80`
+- `scalp/zones.py`: fungsi `price_at_zone()` — cek apakah harga sedang di dalam zona
+
+---
+
 ## [2.0.1] — 2026-06-22
 
 ### Changed

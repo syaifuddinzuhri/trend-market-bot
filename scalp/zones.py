@@ -134,6 +134,29 @@ def find_sd_zones(
     return zones
 
 
+def price_at_zone(zones: list[dict], current_price: float, direction: str, tolerance: float = 0.0) -> dict | None:
+    """
+    Cek apakah harga sedang berada di dalam atau menyentuh zona.
+    SELL → harga menyentuh supply zone (current_price >= zone_bottom - tolerance)
+    BUY  → harga menyentuh demand zone (current_price <= zone_top + tolerance)
+
+    tolerance: buffer dalam harga (misal 0.5 untuk 5 pip gold)
+    Return zona yang disentuh, atau None.
+    """
+    for z in zones:
+        if z["mitigated"]:
+            continue
+        if direction == "SELL" and z["type"] == "supply":
+            # Harga masuk dari bawah ke zona supply
+            if z["bottom"] - tolerance <= current_price <= z["top"] + tolerance:
+                return z
+        elif direction == "BUY" and z["type"] == "demand":
+            # Harga masuk dari atas ke zona demand
+            if z["bottom"] - tolerance <= current_price <= z["top"] + tolerance:
+                return z
+    return None
+
+
 def nearest_zone(zones: list[dict], current_price: float, direction: str) -> dict | None:
     """
     Ambil zona terdekat yang relevan untuk direction.
