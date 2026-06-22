@@ -500,45 +500,65 @@ def manage_pending_orders(symbol: str, direction_valid: str | None):
     - Session habis / news lock
     - Sudah expired (MT5 harusnya auto-cancel, ini sebagai fallback)
     - Harga sudah melewati level (tidak relevan lagi)
+
+    Query langsung ke MT5 — tidak bergantung _pending_state agar aman setelah restart.
     """
-    import time as _time
     from bot.session import is_trading_session
     from bot.news_filter import is_news_lock
 
-    if not _pending_state:
+    pending_types = {
+        mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_SELL_LIMIT,
+        mt5.ORDER_TYPE_BUY_STOP, mt5.ORDER_TYPE_SELL_STOP,
+    }
+
+    # Query langsung dari MT5 — ini sumber kebenaran
+    all_orders = mt5.orders_get(symbol=symbol) or []
+    bot_orders = [o for o in all_orders if o.magic == config.MAGIC_NUMBER and o.type in pending_types]
+
+    if not bot_orders:
+        # Bersihkan _pending_state jika tidak ada di MT5
+        _pending_state.clear()
         return
 
-    # Ambil semua pending order aktif dari MT5
-    mt5_orders = {o.ticket for o in (mt5.orders_get(symbol=symbol) or [])
-                  if o.magic == config.MAGIC_NUMBER}
+    # Sync _pending_state: hapus tiket yang sudah tidak ada di MT5
+    mt5_tickets = {o.ticket for o in bot_orders}
+    for ticket in list(_pending_state.keys()):
+        if ticket not in mt5_tickets:
+            log_console(f"[PEND] ticket={ticket} sudah tidak aktif (filled/expired)")
+            _pending_state.pop(ticket, None)
 
     tick = mt5.symbol_info_tick(symbol)
     current_price = tick.bid if tick else 0
+    session_ok = is_trading_session()
+    news_ok = not is_news_lock()
 
-    for ticket in list(_pending_state.keys()):
-        state = _pending_state[ticket]
+    for o in bot_orders:
+        ticket = o.ticket
+        direction = "BUY" if o.type in {mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_BUY_STOP} else "SELL"
+        level = o.price_open
 
-        # Sudah tidak ada di MT5 (filled atau expired)
-        if ticket not in mt5_orders:
-            log_console(f"[PEND] ticket={ticket} sudah tidak aktif (filled/expired)")
-            _pending_state.pop(ticket, None)
-            continue
+        # Pastikan ada di _pending_state (recovery setelah restart)
+        if ticket not in _pending_state:
+            _pending_state[ticket] = {
+                "direction": direction,
+                "level": level,
+                "sl": o.sl,
+                "tp": o.tp,
+                "lot": o.volume_current,
+                "placed_at": 0,
+                "symbol": symbol,
+            }
 
         reason = None
 
-        # Trend berbalik
-        if direction_valid and state["direction"] != direction_valid:
+        if direction_valid and direction != direction_valid:
             reason = f"trend berbalik → {direction_valid}"
-
-        # Session habis atau news lock
-        elif not is_trading_session():
+        elif not session_ok:
             reason = "session tutup"
-        elif is_news_lock():
+        elif not news_ok:
             reason = "news lock"
-
-        # Harga sudah melewati level (terlalu jauh, peluang tidak relevan)
         elif current_price > 0:
-            dist = abs(current_price - state["level"])
+            dist = abs(current_price - level)
             sym_info = mt5.symbol_info(symbol)
             atr_approx = (sym_info.point * 100) if sym_info else 0.5
             if dist > atr_approx * config.PENDING_MAX_DISTANCE_ATR:
@@ -554,10 +574,12 @@ def get_pending_count(symbol: str) -> int:
         mt5.ORDER_TYPE_BUY_LIMIT, mt5.ORDER_TYPE_SELL_LIMIT,
         mt5.ORDER_TYPE_BUY_STOP, mt5.ORDER_TYPE_SELL_STOP,
     }
-    count = sum(
-        1 for o in (mt5.orders_get(symbol=symbol) or [])
-        if o.magic == config.MAGIC_NUMBER and o.type in pending_types
-    )
+    raw = mt5.orders_get(symbol=symbol)
+    if raw is None:
+        log_console("[PEND] orders_get() returned None — MT5 connection issue?", level="WARN")
+        return 0
+    count = sum(1 for o in raw if o.magic == config.MAGIC_NUMBER and o.type in pending_types)
+    log_console(f"[PEND] orders_get() → {len(raw)} total, {count} bot pending")
     return count
 
 

@@ -5,6 +5,14 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.4] — 2026-06-22
+
+### Fixed
+- **Spam pending order (root cause ke-2)** — `manage_pending_orders()` sebelumnya early-return jika `_pending_state` kosong (misal setelah restart), sehingga tidak bisa detect pending yang sudah ada di MT5. Sekarang function query langsung ke MT5 (`orders_get()`), tidak bergantung in-memory state. Juga menambah recovery: pending order yang ditemukan di MT5 tapi tidak ada di `_pending_state` langsung di-sync otomatis.
+- **Debug logging `get_pending_count()`** — tambah log `[PEND] orders_get() → N total, M bot pending` agar mudah diagnosa masalah koneksi MT5
+
+---
+
 ## [1.5.3] — 2026-06-22
 
 ### Fixed
