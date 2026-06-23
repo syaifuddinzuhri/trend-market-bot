@@ -323,49 +323,78 @@ def notify_zone_signal(
     direction: str,
     symbol: str,
     zone: dict,
-    pattern: str,
     entry_tf: str,
     entry: float,
     sl: float,
     tp1: float,
     tp2: float,
+    tp3: float,
     adx: float,
     struct_short: str,
+    struct_ok: bool,
+    candle_score: int,
+    total_score: int,
+    total_max: int,
+    signal_ready: bool,
     with_trend: bool,
     h4_direction: str,
+    filters_passed: list,
+    filters_missing: list,
 ):
-    """Alert entry signal berbasis zona S/R yang di-draw di MT5."""
+    """Alert entry signal berbasis zona S/R dengan 5 lapis konfirmasi."""
     from datetime import datetime
-    arrow     = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
-    sl_dist   = abs(entry - sl)
-    tp1_dist  = abs(tp1 - entry)
-    tp2_dist  = abs(tp2 - entry)
-    rr1       = tp1_dist / sl_dist if sl_dist else 0
-    rr2       = tp2_dist / sl_dist if sl_dist else 0
-    now_str   = datetime.now().strftime("%H:%M")
+    arrow      = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+    now_str    = datetime.now().strftime("%H:%M")
+    sl_dist    = abs(entry - sl)
+    tp1_dist   = abs(tp1 - entry)
+    tp2_dist   = abs(tp2 - entry)
+    tp3_dist   = abs(tp3 - entry)
+    rr1        = tp1_dist / sl_dist if sl_dist else 0
+    rr2        = tp2_dist / sl_dist if sl_dist else 0
 
     zone_label = zone.get("label") or zone.get("zone_type", "")
     zone_type  = zone.get("zone_type", "")
+    zone_icon  = "🔴" if zone_type == "SUPPLY" else ("🟢" if zone_type == "DEMAND" else "🟡")
 
-    zone_icon = "🔴" if zone_type == "SUPPLY" else ("🟢" if zone_type == "DEMAND" else "🟡")
+    status_icon = "✅" if signal_ready else "⏳"
+    status_text = "SIAP ENTRY" if signal_ready else "HAMPIR — cek manual"
+
     trend_tag = (
-        "✅ _Searah trend H4_" if with_trend else
-        f"⚠️ _Counter-trend (H4={'—' if not h4_direction else h4_direction})_"
+        "✅ Searah trend H4" if with_trend else
+        f"⚠️ Counter-trend (H4={h4_direction or '—'})"
     )
 
-    msg = (
-        f"📦 *ZONE SIGNAL {arrow} — {symbol}* `{now_str}`\n"
-        f"\n"
-        f"{zone_icon} Zona : *{zone_label}* `{zone['low']:.2f}`–`{zone['high']:.2f}`\n"
-        f"Candle : `{pattern}` [{entry_tf}] | Struktur : `{struct_short}`\n"
-        f"ADX    : `{adx:.1f}` | {trend_tag}\n"
-        f"\n"
-        f"Entry  : `{entry:.2f}`\n"
-        f"SL     : `{sl:.2f}`  ({sl_dist:.1f} pip)\n"
-        f"TP1    : `{tp1:.2f}`  (+{tp1_dist:.1f} pip | RR 1:{rr1:.1f})\n"
-        f"TP2    : `{tp2:.2f}`  (+{tp2_dist:.1f} pip | RR 1:{rr2:.1f})\n"
-    )
-    send(msg)
+    score_bar  = "🟩" * total_score + "⬜" * (total_max - total_score)
+    passed_str = "\n".join(f"  ✅ {f}" for f in filters_passed) if filters_passed else ""
+    miss_str   = "\n".join(f"  ❌ {f}" for f in filters_missing) if filters_missing else ""
+
+    lines = [
+        f"📦 *ZONE SIGNAL {arrow} — {symbol}* `{now_str}`",
+        f"",
+        f"{status_icon} *{status_text}* | Score `{total_score}/{total_max}` {score_bar}",
+        f"{zone_icon} Zona : *{zone_label}* `{zone['low']:.2f}`–`{zone['high']:.2f}`",
+        f"Timeframe : `{entry_tf}` | Struktur M15 : `{struct_short}`",
+        f"ADX       : `{adx:.1f}` | {trend_tag}",
+    ]
+
+    if passed_str:
+        lines += ["", "*Konfirmasi lolos:*", passed_str]
+    if miss_str:
+        lines += ["", "*Belum lolos:*", miss_str]
+
+    lines += [
+        "",
+        f"*Entry* : `{entry:.2f}`",
+        f"*SL*    : `{sl:.2f}`  ({sl_dist:.1f} pip)",
+        f"*TP1*   : `{tp1:.2f}`  (+{tp1_dist:.1f} pip | RR 1:{rr1:.1f})",
+        f"*TP2*   : `{tp2:.2f}`  (+{tp2_dist:.1f} pip | RR 1:{rr2:.1f})",
+        f"*TP3*   : `{tp3:.2f}`  (+{tp3_dist:.1f} pip | trailing)",
+    ]
+
+    if not signal_ready:
+        lines += ["", "_Tunggu konfirmasi tambahan sebelum entry_"]
+
+    send("\n".join(lines))
 
 
 def notify_counter_trend(

@@ -652,26 +652,137 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
     }
 
 
+def _zone_candle_score(df: pd.DataFrame, direction: str, pip_size: float) -> tuple[int, list[str], list[str]]:
+    """
+    Evaluasi kekuatan candle konfirmasi di zona.
+    Return (score, passed_list, failed_list).
+
+    Filter (masing-masing +1 poin):
+      F1 — Rejection wick panjang (sumbu ke arah zona ≥ 1.5× body)
+      F2 — Close konfirmasi (close searah, melewati 50% candle)
+      F3 — Body cukup besar (body ≥ 30% full range → bukan doji)
+      F4 — Candle sebelumnya juga mendukung (2-bar konfirmasi)
+      F5 — Pattern valid (Pin Bar atau Engulfing)
+    """
+    if len(df) < 3:
+        return 0, [], ["Data candle kurang"]
+
+    cur  = df.iloc[-1]
+    prev = df.iloc[-2]
+    prev2 = df.iloc[-3]
+
+    o, h, l, c = cur["open"], cur["high"], cur["low"], cur["close"]
+    body       = abs(c - o)
+    full_range = h - l if h != l else 1e-9
+    upper_wick = h - max(o, c)
+    lower_wick = min(o, c) - l
+
+    po, ph, pl, pc = prev["open"], prev["high"], prev["low"], prev["close"]
+    prev_body = abs(pc - po)
+
+    passed = []
+    failed = []
+
+    if direction == "BUY":
+        # F1 — sumbu bawah panjang (rejection dari demand zone)
+        if body > 0 and lower_wick >= 1.5 * body:
+            passed.append("Rejection wick bawah ✅")
+        elif lower_wick >= full_range * 0.35:
+            passed.append("Rejection wick bawah ✅")
+        else:
+            failed.append("Rejection wick lemah")
+
+        # F2 — close di atas 60% range candle (bullish close kuat)
+        close_pct = (c - l) / full_range if full_range > 0 else 0
+        if close_pct >= 0.60:
+            passed.append("Close bullish kuat ✅")
+        else:
+            failed.append("Close terlalu rendah")
+
+        # F3 — body cukup (bukan doji)
+        if body >= full_range * 0.25:
+            passed.append("Body cukup ✅")
+        else:
+            failed.append("Doji / body terlalu kecil")
+
+        # F4 — candle sebelumnya juga bearish → exhaustion, lalu balik (2-bar reversal)
+        prev_bearish = pc < po
+        if prev_bearish and c > po:  # current engulf prev bearish
+            passed.append("2-bar reversal ✅")
+        elif pc > po:  # prev juga bullish → momentum naik
+            passed.append("Momentum naik ✅")
+        else:
+            failed.append("Belum ada 2-bar konfirmasi")
+
+        # F5 — pattern valid
+        pattern = check_pattern(df)
+        if pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}:
+            passed.append(f"Pattern {pattern} ✅")
+        else:
+            failed.append("Pattern tidak terdeteksi")
+
+    else:  # SELL
+        # F1 — sumbu atas panjang (rejection dari supply zone)
+        if body > 0 and upper_wick >= 1.5 * body:
+            passed.append("Rejection wick atas ✅")
+        elif upper_wick >= full_range * 0.35:
+            passed.append("Rejection wick atas ✅")
+        else:
+            failed.append("Rejection wick lemah")
+
+        # F2 — close di bawah 40% range candle (bearish close kuat)
+        close_pct = (c - l) / full_range if full_range > 0 else 0
+        if close_pct <= 0.40:
+            passed.append("Close bearish kuat ✅")
+        else:
+            failed.append("Close terlalu tinggi")
+
+        # F3 — body cukup
+        if body >= full_range * 0.25:
+            passed.append("Body cukup ✅")
+        else:
+            failed.append("Doji / body terlalu kecil")
+
+        # F4 — 2-bar konfirmasi
+        prev_bullish = pc > po
+        if prev_bullish and c < po:  # engulf
+            passed.append("2-bar reversal ✅")
+        elif pc < po:
+            passed.append("Momentum turun ✅")
+        else:
+            failed.append("Belum ada 2-bar konfirmasi")
+
+        # F5 — pattern
+        pattern = check_pattern(df)
+        if pattern in {BEARISH_PIN_BAR, BEARISH_ENGULFING}:
+            passed.append(f"Pattern {pattern} ✅")
+        else:
+            failed.append("Pattern tidak terdeteksi")
+
+    return len(passed), passed, failed
+
+
 def scan_zone_entry(
     df_h1: pd.DataFrame,
     df_m15: pd.DataFrame,
     df_m5: pd.DataFrame | None = None,
 ) -> None:
     """
-    Scan sinyal entry berbasis zona S/R yang di-draw manual di MT5.
+    Scan sinyal entry berbasis zona S/R dari MT5 dengan 5 lapis konfirmasi:
 
-    Logika:
-      1. Baca zones.csv dari ZoneExporter EA
-      2. Cek apakah harga sekarang masuk ke zona (Supply/Demand/Neutral)
-      3. Cek candle konfirmasi di M5 (atau M15 jika M5 tidak tersedia)
-      4. Cek ADX minimal (pasar punya momentum)
-      5. Kirim alert Telegram — format ringkas dengan entry/SL/TP
+      [Zona]   Harga masuk rectangle yang di-draw di MT5
+      [Candle] Rejection wick panjang ke arah zona
+      [Close]  Close candle kuat searah (bullish/bearish close)
+      [Struct] M15 BOS atau CHoCH searah sinyal
+      [ADX]    Momentum cukup (ADX ≥ ADX_MIN)
 
+    Signal dikirim jika ≥ 4 dari 5 konfirmasi lolos.
     Throttle: 1 alert per zona per ALERT_COOLDOWN_SECONDS.
     """
     import time as _t
     import MetaTrader5 as mt5
     from bot.risk import get_pip_size, calc_sl
+    from bot.trend import get_trend, TREND_BULLISH, TREND_BEARISH
 
     mt5_zones = load_zones()
     if not mt5_zones:
@@ -683,87 +794,130 @@ def scan_zone_entry(
 
     pip_size = get_pip_size(config.SYMBOL)
     last_h1  = df_h1.iloc[-1]
-    adx_val  = last_h1.get("adx", 0)
-
-    if adx_val < config.ADX_MIN:
-        return
+    adx_val  = float(last_h1.get("adx", 0))
+    atr_val  = float(last_h1.get("atr", 0))
 
     entry_df = df_m5 if df_m5 is not None else df_m15
     entry_tf = "M5" if df_m5 is not None else "M15"
-    pattern  = check_pattern(entry_df)
 
-    bull_pat = pattern in {BULLISH_PIN_BAR, BULLISH_ENGULFING}
-    bear_pat = pattern in {BEARISH_PIN_BAR, BEARISH_ENGULFING}
+    # ── Tentukan arah kandidat dari zona terdekat ──────────────────
+    price_bid = tick.bid
+    price_ask = tick.ask
 
-    if not bull_pat and not bear_pat:
-        return
+    for direction in ("BUY", "SELL"):
+        price_now = price_ask if direction == "BUY" else price_bid
+        zone = price_in_zone(mt5_zones, price_now, direction, tolerance=pip_size * 3)
+        if zone is None:
+            continue
 
-    candle_direction = "BUY" if bull_pat else "SELL"
-    price_now = tick.bid if candle_direction == "SELL" else tick.ask
+        # ── Filter 1: ADX — pasar punya momentum ──────────────────
+        adx_ok = adx_val >= config.ADX_MIN
+        adx_lbl = f"ADX {adx_val:.1f} ✅" if adx_ok else f"ADX {adx_val:.1f} ❌ (< {config.ADX_MIN})"
 
-    zone = price_in_zone(mt5_zones, price_now, candle_direction, tolerance=pip_size * 3)
-    if zone is None:
-        return
+        # ── Filter 2–4: Candle score (3 sub-filter dari 5) ────────
+        candle_score, c_passed, c_failed = _zone_candle_score(entry_df, direction, pip_size)
+        candle_ok = candle_score >= 2   # minimal 2 dari 5 candle filter
 
-    # Throttle per zona
-    zone_key = (config.SYMBOL, "ZONE", zone["name"], candle_direction)
-    now = _t.time()
-    last_sent = _alert_sent_at.get(zone_key, 0)
-    if now - last_sent < config.ALERT_COOLDOWN_SECONDS:
-        return
+        # ── Filter 5: M15 Struktur searah ─────────────────────────
+        m15_struct = get_market_structure(df_m15)
+        struct_lbl = {
+            "BULLISH_BOS": "BOS↑", "BEARISH_BOS": "BOS↓",
+            "BULLISH_CHOCH": "CHoCH↑", "BEARISH_CHOCH": "CHoCH↓",
+        }.get(m15_struct, m15_struct[:8] if m15_struct else "—")
 
-    # Hitung SL/TP
-    sl_price, sl_dist = calc_sl(df_h1, candle_direction, price_now)
-    if sl_dist <= 0:
-        return
+        struct_ok = (
+            (direction == "BUY"  and is_bullish_structure(m15_struct)) or
+            (direction == "SELL" and is_bearish_structure(m15_struct))
+        )
+        struct_lbl_full = f"Struktur {struct_lbl} ✅" if struct_ok else f"Struktur {struct_lbl} ❌"
 
-    tp1_price = (price_now + config.TP1_PIPS * pip_size if candle_direction == "BUY"
-                 else price_now - config.TP1_PIPS * pip_size)
-    tp2_price = (price_now + config.TP2_PIPS * pip_size if candle_direction == "BUY"
-                 else price_now - config.TP2_PIPS * pip_size)
+        # ── Total score ────────────────────────────────────────────
+        # Poin: ADX(1) + candle_score(0-5) + struct(1) = max 7
+        # Threshold: minimal ADX + 2 candle + struct = 4 poin
+        total_score   = (1 if adx_ok else 0) + candle_score + (1 if struct_ok else 0)
+        total_max     = 7
+        signal_ready  = adx_ok and candle_score >= 2 and struct_ok
+        signal_almost = adx_ok and candle_score >= 2   # struct belum tapi candle kuat
 
-    # Tambahan konteks: H4 trend searah atau counter?
-    from bot.trend import get_trend, TREND_BULLISH, TREND_BEARISH, NO_TRADE
-    h4_direction = ""
-    try:
-        from bot.indicators import get_h4
-        df_h4_z = get_h4(config.SYMBOL)
-        if df_h4_z is not None:
-            t4 = get_trend(df_h4_z)
-            h4_direction = "BUY" if t4 == TREND_BULLISH else ("SELL" if t4 == TREND_BEARISH else "")
-    except Exception:
-        pass
+        if not adx_ok and candle_score < 2:
+            log_console(
+                f"[ZONE] {direction} di zona {zone['low']:.2f}–{zone['high']:.2f} "
+                f"— score {total_score}/{total_max} belum cukup, skip"
+            )
+            continue
 
-    with_trend = (h4_direction == candle_direction)
-    m15_struct = get_market_structure(df_m15)
-    struct_lbl = {
-        "BULLISH_BOS": "BOS↑", "BEARISH_BOS": "BOS↓",
-        "BULLISH_CHOCH": "CHoCH↑", "BEARISH_CHOCH": "CHoCH↓",
-    }.get(m15_struct, m15_struct[:8] if m15_struct else "—")
+        # ── Throttle ───────────────────────────────────────────────
+        zone_key  = (config.SYMBOL, "ZONE", zone["name"], direction)
+        now       = _t.time()
+        last_sent = _alert_sent_at.get(zone_key, 0)
+        if now - last_sent < config.ALERT_COOLDOWN_SECONDS:
+            continue
 
-    telegram.notify_zone_signal(
-        direction=candle_direction,
-        symbol=config.SYMBOL,
-        zone=zone,
-        pattern=pattern,
-        entry_tf=entry_tf,
-        entry=price_now,
-        sl=sl_price,
-        tp1=tp1_price,
-        tp2=tp2_price,
-        adx=adx_val,
-        struct_short=struct_lbl,
-        with_trend=with_trend,
-        h4_direction=h4_direction,
-    )
+        # ── Hitung SL / TP ─────────────────────────────────────────
+        sl_price, sl_dist = calc_sl(df_h1, direction, price_now)
+        if sl_dist <= 0:
+            continue
 
-    _alert_sent_at[zone_key] = now
-    log_console(
-        f"[ZONE] ⚡ {candle_direction} signal | "
-        f"Zona {zone['zone_type']} {zone['low']:.2f}–{zone['high']:.2f} | "
-        f"Pattern={pattern} [{entry_tf}] | ADX={adx_val:.1f} | "
-        f"{'Searah' if with_trend else 'Counter'} H4"
-    )
+        tp1_price = (price_now + config.TP1_PIPS * pip_size if direction == "BUY"
+                     else price_now - config.TP1_PIPS * pip_size)
+        tp2_price = (price_now + config.TP2_PIPS * pip_size if direction == "BUY"
+                     else price_now - config.TP2_PIPS * pip_size)
+        tp3_price = (price_now + config.TP3_PIPS * pip_size if direction == "BUY"
+                     else price_now - config.TP3_PIPS * pip_size)
+
+        # ── H4 trend — searah atau counter ────────────────────────
+        h4_direction = ""
+        try:
+            from bot.indicators import get_h4
+            df_h4_z = get_h4(config.SYMBOL)
+            if df_h4_z is not None:
+                t4 = get_trend(df_h4_z)
+                h4_direction = "BUY" if t4 == TREND_BULLISH else ("SELL" if t4 == TREND_BEARISH else "")
+        except Exception:
+            pass
+
+        with_trend = (h4_direction == direction)
+
+        # ── Kumpulkan semua filter detail ──────────────────────────
+        all_filters = (
+            [adx_lbl] +
+            c_passed +
+            [struct_lbl_full]
+        )
+        missing_filters = c_failed + ([] if struct_ok else [f"Tunggu {struct_lbl} M15"])
+
+        log_console(
+            f"[ZONE] {'⚡' if signal_ready else '⏳'} {direction} | "
+            f"Zona {zone['zone_type']} {zone['low']:.2f}–{zone['high']:.2f} | "
+            f"Score={total_score}/{total_max} | ADX={adx_val:.1f} | "
+            f"Candle={candle_score}/5 | Struct={'✅' if struct_ok else '❌'} | "
+            f"H4={'searah' if with_trend else 'counter'}"
+        )
+
+        telegram.notify_zone_signal(
+            direction=direction,
+            symbol=config.SYMBOL,
+            zone=zone,
+            entry_tf=entry_tf,
+            entry=price_now,
+            sl=sl_price,
+            tp1=tp1_price,
+            tp2=tp2_price,
+            tp3=tp3_price,
+            adx=adx_val,
+            struct_short=struct_lbl,
+            struct_ok=struct_ok,
+            candle_score=candle_score,
+            total_score=total_score,
+            total_max=total_max,
+            signal_ready=signal_ready,
+            with_trend=with_trend,
+            h4_direction=h4_direction,
+            filters_passed=all_filters,
+            filters_missing=missing_filters,
+        )
+
+        _alert_sent_at[zone_key] = now
 
 
 def evaluate_pending(

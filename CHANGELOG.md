@@ -5,6 +5,21 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.2] — 2026-06-23
+
+### Changed
+- **Zone Signal upgrade — 5 lapis konfirmasi** (lebih valid, lebih sedikit false signal):
+  - F1: Rejection wick panjang ke arah zona (≥ 1.5× body atau ≥ 35% range)
+  - F2: Close candle kuat searah (close ≥ 60% range untuk BUY, ≤ 40% untuk SELL)
+  - F3: Body candle cukup (≥ 25% range — bukan doji/spinning top)
+  - F4: 2-bar konfirmasi (candle sebelumnya exhaustion lalu reversal, atau momentum searah)
+  - F5: Pattern terdeteksi (Pin Bar atau Engulfing)
+  - + ADX ≥ ADX_MIN + Struktur M15 BOS/CHoCH searah
+  - Total max score 7 — signal dikirim jika ADX OK + candle ≥ 2/5 + struct OK
+  - Notif `📦 ZONE SIGNAL` menampilkan score bar, daftar konfirmasi lolos/belum, TP1/TP2/TP3
+
+---
+
 ## [2.1.1] — 2026-06-23
 
 ### Added
