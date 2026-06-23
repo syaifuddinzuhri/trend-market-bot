@@ -637,8 +637,22 @@ def evaluate(
     if adx_val < adx_threshold:
         return None
 
-    if not has_pullback(df_h1, trend):
+    # ── Pullback check — relaks jika ADX sangat kuat ─────────────────
+    # ADX < 45: wajib pullback ke EMA50 H1 (strategi normal)
+    # ADX ≥ 45: skip pullback — momentum terlalu kuat, harga jarang balik ke EMA
+    strong_trend = adx_val >= config.ADX_STRONG_TREND
+    pullback_ok  = has_pullback(df_h1, trend)
+
+    if not pullback_ok and not strong_trend:
+        log_console(
+            f"[SIG] Pullback belum terjadi (ADX={adx_val:.1f} < {config.ADX_STRONG_TREND}) — skip"
+        )
         return None
+
+    if not pullback_ok and strong_trend:
+        log_console(
+            f"[SIG] Pullback skip — ADX={adx_val:.1f} ≥ {config.ADX_STRONG_TREND} (strong trend mode)"
+        )
 
     # M5 → candle entry presisi (jika tersedia), fallback ke M15
     entry_df = df_m5 if df_m5 is not None else df_m15
@@ -648,8 +662,9 @@ def evaluate(
         log_console(f"[SIG] Candle {entry_tf} tidak valid untuk {direction} — skip")
         return None
 
+    mode_label = "STRONG-TREND" if (strong_trend and not pullback_ok) else "PRIMARY"
     log_console(
-        f"[SIG] ✅ PRIMARY | {direction} | {structure} ({strength}) | "
+        f"[SIG] ✅ {mode_label} | {direction} | {structure} ({strength}) | "
         f"ADX={adx_val:.1f} | ATR={atr_val:.4f} | pattern={pattern} [{entry_tf}]"
     )
     return {

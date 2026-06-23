@@ -32,8 +32,9 @@ LOG_CSV = os.getenv("LOG_CSV", "logs/trades.csv")
 # Indicator params
 EMA_PERIODS = [20, 50, 100, 200]
 ADX_PERIOD = 14
-ADX_MIN = int(os.getenv("ADX_MIN", 25))
-ADX_SKIP = 20
+ADX_MIN         = int(os.getenv("ADX_MIN", 25))
+ADX_SKIP        = 20
+ADX_STRONG_TREND = int(os.getenv("ADX_STRONG_TREND", 45))  # skip pullback jika ADX >= nilai ini
 ATR_PERIOD = 14
 ATR_MA_PERIOD = 20
 # ATR filter: ATR harus >= ATR_MA × ATR_MA_RATIO (0.85 = toleransi 15% di bawah MA)
