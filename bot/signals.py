@@ -27,10 +27,11 @@ from bot import telegram
 
 _ADX_CHOCH_BONUS = 5
 
-# Throttle alert manual — cegah spam Telegram tiap 5 detik
-# Key: (symbol, direction, passed) → epoch seconds terakhir kirim
-_alert_sent_at: dict[tuple, float] = {}
+# Throttle alert manual — cegah spam Telegram tiap 5 menit
+_alert_sent_at:    dict[tuple, float] = {}   # key: (symbol, direction) → epoch
+_alert_last_price: dict[tuple, float] = {}   # key: (symbol, direction) → entry price terakhir
 ALERT_MIN_FILTERS = 6          # kirim jika lolos >= N filter
+ALERT_ADVERSE_PIP = 5          # warning jika harga sudah bergerak >5 pip berlawanan
 
 
 def _ok(v: bool) -> str:
@@ -169,28 +170,35 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
         last = _alert_sent_at.get(key, 0)
         if now - last >= config.ALERT_COOLDOWN_SECONDS:
             try:
-                from bot.risk import calc_sl
+                from bot.risk import calc_sl, get_pip_size
                 tick = mt5.symbol_info_tick(config.SYMBOL)
                 entry_price = tick.ask if direction == "BUY" else tick.bid
                 sl_price, sl_dist = calc_sl(df_h1, direction, entry_price)
-                sym_info = mt5.symbol_info(config.SYMBOL)
-                # pip_size: untuk XAUUSD point=0.01 → pip=0.1, untuk XAUUSDm point=0.001 → pip=0.01
-                # Normalkan ke 1 pip = 10 point, minimal 0.1
-                raw_point = sym_info.point if sym_info else 0.01
-                pip_size = max(raw_point * 10, 0.1)
+                pip_size = get_pip_size(config.SYMBOL)
+
                 if config.TP_MODE == "pips":
                     tp1_price = entry_price + config.TP1_PIPS * pip_size if direction == "BUY" else entry_price - config.TP1_PIPS * pip_size
                     tp2_price = entry_price + config.TP2_PIPS * pip_size if direction == "BUY" else entry_price - config.TP2_PIPS * pip_size
+                    tp3_price = entry_price + config.TP3_PIPS * pip_size if direction == "BUY" else entry_price - config.TP3_PIPS * pip_size
                 else:
                     tp1_price = entry_price + sl_dist * config.TP1_R if direction == "BUY" else entry_price - sl_dist * config.TP1_R
                     tp2_price = entry_price + sl_dist * config.TP2_R if direction == "BUY" else entry_price - sl_dist * config.TP2_R
-                # TP3
-                if config.TP_MODE == "pips":
-                    tp3_price = entry_price + config.TP3_PIPS * pip_size if direction == "BUY" else entry_price - config.TP3_PIPS * pip_size
-                else:
                     tp3_price = tp2_price
 
-                # Gerakan saat ini
+                # Deteksi apakah harga sudah bergerak berlawanan sejak alert terakhir
+                last_price = _alert_last_price.get(key, 0)
+                adverse_warning = ""
+                if last_price > 0:
+                    if direction == "SELL":
+                        adverse_pips = (entry_price - last_price) / pip_size
+                    else:
+                        adverse_pips = (last_price - entry_price) / pip_size
+                    if adverse_pips >= ALERT_ADVERSE_PIP:
+                        adverse_warning = (
+                            f"⚠️ Harga bergerak {adverse_pips:.0f} pip berlawanan "
+                            f"sejak alert terakhir ({last_price:.2f} → {entry_price:.2f})"
+                        )
+
                 ema20_h1 = last_h1.get("ema20", 0)
                 ema50_h1 = last_h1.get("ema50", 0)
                 if direction == "SELL":
@@ -223,8 +231,10 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
                     ema50=ema50_h1,
                     high_m15=high_m15,
                     low_m15=low_m15,
+                    adverse_warning=adverse_warning,
                 )
-                _alert_sent_at[key] = now
+                _alert_sent_at[key]    = now
+                _alert_last_price[key] = entry_price
                 log_console(f"[SCAN] ⚡ Alert manual dikirim ke Telegram ({passed}/{total})")
             except Exception as e:
                 log_console(f"[SCAN] Alert gagal dikirim: {e}", level="WARN")
@@ -284,8 +294,8 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
     tick = mt5.symbol_info_tick(config.SYMBOL)
     current_price = tick.bid if tick else close_m15
 
-    sym_info = mt5.symbol_info(config.SYMBOL)
-    pip_size = max(sym_info.point * 10, 0.1) if sym_info else 0.1
+    from bot.risk import get_pip_size
+    pip_size = get_pip_size(config.SYMBOL)
 
     # ── Deteksi kondisi sekarang ─────────────────────────────────────
     if direction == "SELL":

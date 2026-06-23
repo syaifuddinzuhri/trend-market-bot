@@ -268,8 +268,8 @@ def _run_cycle():
     tick = mt5.symbol_info_tick(sc.SYMBOL)
     if tick is None:
         return
-    sym_info = mt5.symbol_info(sc.SYMBOL)
-    pip_size = max(sym_info.point * 10, 0.1) if sym_info else 0.1
+    from bot.risk import get_pip_size
+    pip_size = get_pip_size(sc.SYMBOL)
 
     entry     = tick.bid if direction == "SELL" else tick.ask
     sl        = _get_swing(df, direction, lookback=10)

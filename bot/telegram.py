@@ -208,6 +208,7 @@ def notify_alert_manual(
     ema50: float = 0,
     high_m15: float = 0,
     low_m15: float = 0,
+    adverse_warning: str = "",
 ):
     from datetime import datetime
     arrow      = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
@@ -235,6 +236,9 @@ def notify_alert_manual(
         lines.append(f"*EMA H1*   : EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}`")
     if high_m15 or low_m15:
         lines.append(f"*Range M15*: High `{high_m15:.2f}` — Low `{low_m15:.2f}`")
+
+    if adverse_warning:
+        lines += ["", adverse_warning]
 
     lines += [
         f"",

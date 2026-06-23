@@ -309,8 +309,8 @@ def manage_open_positions(symbol: str, df_h1=None):
         cur = tick.bid if direction == "BUY" else tick.ask
         profit_dist = (cur - entry) if direction == "BUY" else (entry - cur)
 
-        sym_info_mgmt = mt5.symbol_info(symbol)
-        pip_size = (sym_info_mgmt.point * 10) if sym_info_mgmt else 0.1
+        from bot.risk import get_pip_size
+        pip_size = get_pip_size(symbol)
 
         if config.TP_MODE == "pips":
             tp1_trigger = config.TP1_PIPS * pip_size

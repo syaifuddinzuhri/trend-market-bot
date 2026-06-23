@@ -14,6 +14,7 @@ from bot import connector, trade, telegram
 from bot import signals
 from bot.indicators import get_h4, get_h1, get_m15, get_m5
 from bot.risk import get_lot_size, calc_sl
+import bot.risk as trade_risk
 from bot.logger import log_console, log_trade
 from bot.session import is_trading_session
 from bot.news_filter import is_news_lock
@@ -122,8 +123,7 @@ def _open_trade(sig: dict, df_h1, label: str = "", df_m5=None) -> bool:
         log_console("[BOT] SL distance tidak valid — skip", level="WARN")
         return False
 
-    sym_info = mt5.symbol_info(config.SYMBOL)
-    pip_size = (sym_info.point * 10) if sym_info else 0.1
+    pip_size = trade_risk.get_pip_size(config.SYMBOL)
 
     if config.TP_MODE == "pips":
         tp1_dist = config.TP1_PIPS * pip_size

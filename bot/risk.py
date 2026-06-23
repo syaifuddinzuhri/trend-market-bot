@@ -3,6 +3,22 @@ import config
 from bot.logger import log_console
 
 
+def get_pip_size(symbol: str) -> float:
+    """
+    Menghitung 1 pip dalam satuan harga untuk simbol tertentu.
+    - XAUUSD/metal/index (point >= 0.01): 1 pip = 1.0 (harga bergerak $1 per pip)
+    - Forex 5-digit (point=0.00001): 1 pip = 0.0001
+    - Forex 3-digit (point=0.001):   1 pip = 0.01
+    """
+    sym_info = mt5.symbol_info(symbol)
+    if sym_info is None:
+        return 1.0
+    point = sym_info.point
+    if point >= 0.01:
+        return 1.0           # XAUUSD, XAGUSD, indices
+    return point * 10        # forex standard
+
+
 def get_lot_size(symbol: str, sl_points: float, balance: float) -> float:
     """
     Jika FIXED_LOT > 0 di .env → pakai lot tetap.
