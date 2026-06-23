@@ -301,6 +301,44 @@ def notify_alert_manual(
     send("\n".join(lines))
 
 
+def notify_counter_trend(
+    direction: str,
+    main_direction: str,
+    symbol: str,
+    pullback_pips: float,
+    structure: str,
+    pattern: str,
+    entry: float,
+    sl: float,
+    tp1: float,
+    adx: float,
+):
+    """Alert peluang scalp counter-trend saat pullback besar."""
+    from datetime import datetime
+    arrow      = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+    main_arrow = "🟢 BUY" if main_direction == "BUY" else "🔴 SELL"
+    sl_dist    = abs(entry - sl)
+    tp1_dist   = abs(tp1 - entry)
+    rr         = tp1_dist / sl_dist if sl_dist else 0
+    now_str    = datetime.now().strftime("%H:%M")
+    msg = (
+        f"↩️ *SCALP COUNTER-TREND — {symbol}* `{now_str}`\n"
+        f"\n"
+        f"Trend utama : {main_arrow} | Pullback : *{pullback_pips:.0f} pip*\n"
+        f"Peluang     : {arrow} _(berlawanan trend utama)_\n"
+        f"\n"
+        f"Struktur M15 : `{structure}` | Candle : `{pattern}`\n"
+        f"ADX          : `{adx:.1f}`\n"
+        f"\n"
+        f"Entry : `{entry:.2f}`\n"
+        f"SL    : `{sl:.2f}`  ({sl_dist:.1f} pip)\n"
+        f"TP1   : `{tp1:.2f}`  (+{tp1_dist:.1f} pip | RR 1:{rr:.1f})\n"
+        f"\n"
+        f"⚠️ _Counter-trend — resiko lebih tinggi, gunakan lot kecil_"
+    )
+    send(msg)
+
+
 def notify_trail_exit(ticket: int, symbol: str, price: float, pnl: float):
     msg = (
         f"🏁 *Trail Exit — {symbol}*\n"

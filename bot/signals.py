@@ -239,6 +239,70 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
             except Exception as e:
                 log_console(f"[SCAN] Alert gagal dikirim: {e}", level="WARN")
 
+    # ── Counter-trend opportunity check ──────────────────────────────
+    # Jika pullback besar (>= 30 pip) dari low/high dan M15 tunjukkan
+    # struktur berlawanan + candle konfirmasi → kirim alert scalp counter-trend
+    if direction in ("BUY", "SELL") and trend_ok and adx_ok:
+        import time as _ct
+        try:
+            tick_ct = mt5.symbol_info_tick(config.SYMBOL)
+            if tick_ct:
+                from bot.risk import get_pip_size as _gps
+                _pip = _gps(config.SYMBOL)
+                _cp  = tick_ct.bid
+                _h20 = df_m15["high"].tail(20).max()
+                _l20 = df_m15["low"].tail(20).min()
+                pb_pips = (_cp - _l20) / _pip if direction == "SELL" else (_h20 - _cp) / _pip
+
+                if pb_pips >= 30:
+                    opp_dir = "BUY" if direction == "SELL" else "SELL"
+                    opp_struct = get_market_structure(df_m15)
+                    opp_struct_ok = (
+                        (opp_dir == "BUY"  and is_bullish_structure(opp_struct)) or
+                        (opp_dir == "SELL" and is_bearish_structure(opp_struct))
+                    )
+                    opp_pat = check_pattern(entry_df)
+                    opp_candle_ok = (
+                        (opp_dir == "BUY"  and opp_pat in {BULLISH_PIN_BAR, BULLISH_ENGULFING}) or
+                        (opp_dir == "SELL" and opp_pat in {BEARISH_PIN_BAR, BEARISH_ENGULFING})
+                    )
+                    if opp_struct_ok and opp_candle_ok:
+                        ct_key  = (config.SYMBOL, f"CT_{opp_dir}")
+                        ct_now  = _ct.time()
+                        ct_last = _alert_sent_at.get(ct_key, 0)
+                        if ct_now - ct_last >= config.ALERT_COOLDOWN_SECONDS:
+                            from bot.risk import calc_sl as _csl
+                            _entry = tick_ct.ask if opp_dir == "BUY" else tick_ct.bid
+                            _sl, _sl_dist = _csl(df_h1, opp_dir, _entry)
+                            if _sl_dist > 0:
+                                from bot.risk import get_pip_size as _gps2
+                                _ps = _gps2(config.SYMBOL)
+                                _tp1 = (_entry + config.TP1_PIPS * _ps if opp_dir == "BUY"
+                                        else _entry - config.TP1_PIPS * _ps)
+                                struct_lbl = {
+                                    "BULLISH_BOS": "BOS↑", "BEARISH_BOS": "BOS↓",
+                                    "BULLISH_CHOCH": "CHoCH↑", "BEARISH_CHOCH": "CHoCH↓",
+                                }.get(opp_struct, opp_struct[:8] if opp_struct else "—")
+                                telegram.notify_counter_trend(
+                                    direction=opp_dir,
+                                    main_direction=direction,
+                                    symbol=config.SYMBOL,
+                                    pullback_pips=pb_pips,
+                                    structure=struct_lbl,
+                                    pattern=opp_pat,
+                                    entry=_entry,
+                                    sl=_sl,
+                                    tp1=_tp1,
+                                    adx=adx_val,
+                                )
+                                _alert_sent_at[ct_key] = ct_now
+                                log_console(
+                                    f"[SCAN] ↩️ Counter-trend {opp_dir} alert — "
+                                    f"pullback {pb_pips:.0f} pip | {struct_lbl} | {opp_pat}"
+                                )
+        except Exception as _e:
+            log_console(f"[SCAN] Counter-trend check error: {_e}", level="WARN")
+
     return all_ok
 
 

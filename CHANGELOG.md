@@ -5,6 +5,16 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.9] — 2026-06-23
+
+### Added
+- **Counter-trend scalp alert** — saat pullback >= 30 pip dari low/high dan M15 tunjukkan
+  struktur berlawanan (BOS/CHoCH) + candle konfirmasi → bot kirim notif `↩️ SCALP COUNTER-TREND`
+  ke Telegram untuk entry manual; bot auto-entry tetap searah trend H4
+- `telegram.notify_counter_trend()` — format notif khusus counter-trend dengan label peringatan
+
+---
+
 ## [2.0.8] — 2026-06-22
 
 ### Added
