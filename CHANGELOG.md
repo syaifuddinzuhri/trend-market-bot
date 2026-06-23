@@ -5,6 +5,24 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.2.0] — 2026-06-23
+
+### Added
+- **Breakout Scanner** — strategi kompresi + breakout (metode trader):
+  - `breakout_scanner.py` — script standalone, jalan terpisah dari bot utama
+  - `start_breakout.bat` — launcher
+  - Deteksi 4 pola kompresi dari candle M5:
+    - **Descending Triangle**: resistance makin turun, support flat (paling umum)
+    - **Ascending Triangle**: support makin naik, resistance flat
+    - **Wedge**: resistance turun + support naik (makin sempit)
+    - **Range**: harga sideways dalam batas sempit
+  - Konfirmasi breakout: candle CLOSE di luar zona (bukan hanya wick) + body ≥ 45% range + ADX ≥ 18
+  - SL otomatis di sisi berlawanan zona + buffer (bukan fixed pip)
+  - Alert Telegram: nama pola, deskripsi, zona kompresi, entry/SL/TP1/TP2 + RR
+  - Throttle 5 menit per arah
+
+---
+
 ## [2.1.2] — 2026-06-23
 
 ### Changed
