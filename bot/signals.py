@@ -302,6 +302,23 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
     move_from_high = (high_m15 - current_price) / pip_size   # pip turun dari high
     move_from_low  = (current_price - low_m15)  / pip_size   # pip naik dari low
 
+    # ── Seberapa besar pullback saat ini ─────────────────────────────
+    # Untuk SELL trend: pullback = pip naik dari low terakhir
+    # Untuk BUY trend:  pullback = pip turun dari high terakhir
+    if direction == "SELL":
+        pullback_pips = move_from_low   # naik dari low = sedang pullback naik
+    elif direction == "BUY":
+        pullback_pips = move_from_high  # turun dari high = sedang pullback turun
+    else:
+        pullback_pips = 0
+
+    if pullback_pips < 30:
+        pullback_size = "kecil"
+    elif pullback_pips < 70:
+        pullback_size = "sedang"
+    else:
+        pullback_size = "besar"
+
     # ── Deteksi exhaustion (candle kecil) ────────────────────────────
     last5 = df_m15.tail(5)
     avg_body = (abs(last5["close"] - last5["open"]) / pip_size).mean()
@@ -309,7 +326,6 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
 
     # ── Zona bounce/re-entry ──────────────────────────────────────────
     if direction == "SELL" and not is_pullback_now:
-        # Harga lanjut turun → zona SELL ulang jika ada bounce ke EMA
         bounce_low  = min(ema20_h1, current_price + atr_val * 0.5)
         bounce_high = max(ema20_h1, current_price + atr_val * 1.0)
         bounce_zone = f"{bounce_low:.2f}–{bounce_high:.2f}"
@@ -322,21 +338,60 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
 
     # ── Narasi situasi ────────────────────────────────────────────────
     narasi_parts = []
+
+    # Konteks pergerakan utama
     if direction == "SELL":
-        narasi_parts.append(f"Harga turun {move_from_high:.0f} pip dari high {high_m15:.2f}")
+        narasi_parts.append(f"Trend SELL — harga turun {move_from_high:.0f} pip dari high {high_m15:.2f}")
     elif direction == "BUY":
-        narasi_parts.append(f"Harga naik {move_from_low:.0f} pip dari low {low_m15:.2f}")
+        narasi_parts.append(f"Trend BUY — harga naik {move_from_low:.0f} pip dari low {low_m15:.2f}")
 
+    # Narasi pullback jika sedang terjadi
+    if is_pullback_now and pullback_pips > 10:
+        if direction == "SELL":
+            if pullback_size == "kecil":
+                narasi_parts.append(
+                    f"Pullback naik {pullback_pips:.0f} pip (kecil) — normal retracement, "
+                    f"tunggu rejection di EMA20 ({ema20_h1:.2f}) lalu SELL"
+                )
+            elif pullback_size == "sedang":
+                narasi_parts.append(
+                    f"Pullback naik {pullback_pips:.0f} pip (sedang) — waspada, "
+                    f"cari rejection di EMA50 ({ema50_h1:.2f}) atau resistance {high_m15:.2f}"
+                )
+            else:  # besar
+                narasi_parts.append(
+                    f"⚠️ Pullback naik {pullback_pips:.0f} pip (BESAR) — "
+                    f"bisa scalp BUY counter-trend ke resistance {ema50_h1:.2f}–{ema20_h1:.2f}, "
+                    f"ATAU tunggu SELL di area EMA50 ({ema50_h1:.2f}) jika ada rejection"
+                )
+        elif direction == "BUY":
+            if pullback_size == "kecil":
+                narasi_parts.append(
+                    f"Pullback turun {pullback_pips:.0f} pip (kecil) — normal retracement, "
+                    f"tunggu bounce di EMA20 ({ema20_h1:.2f}) lalu BUY"
+                )
+            elif pullback_size == "sedang":
+                narasi_parts.append(
+                    f"Pullback turun {pullback_pips:.0f} pip (sedang) — waspada, "
+                    f"cari bounce di EMA50 ({ema50_h1:.2f}) atau support {low_m15:.2f}"
+                )
+            else:  # besar
+                narasi_parts.append(
+                    f"⚠️ Pullback turun {pullback_pips:.0f} pip (BESAR) — "
+                    f"bisa scalp SELL counter-trend ke support {ema50_h1:.2f}–{ema20_h1:.2f}, "
+                    f"ATAU tunggu BUY di area EMA50 ({ema50_h1:.2f}) jika ada bounce"
+                )
+
+    # Exhaustion / momentum candle
     if is_exhaustion:
-        narasi_parts.append(f"Candle kecil (avg body {avg_body:.1f} pip) — kemungkinan konsolidasi/exhaustion")
-        if bounce_zone:
-            label = "SELL" if direction == "SELL" else "BUY"
-            narasi_parts.append(f"Jika bounce ke {bounce_zone} → peluang {label} ulang")
+        narasi_parts.append(
+            f"Candle kecil avg {avg_body:.1f} pip — konsolidasi/exhaustion"
+            + (f", jika bounce ke {bounce_zone} → peluang {'SELL' if direction == 'SELL' else 'BUY'} ulang" if bounce_zone else "")
+        )
     else:
-        body_avg = avg_body
-        narasi_parts.append(f"Candle aktif (avg body {body_avg:.1f} pip) — momentum masih ada")
+        narasi_parts.append(f"Candle aktif avg {avg_body:.1f} pip — momentum masih jalan")
 
-    narasi = " | ".join(narasi_parts)
+    narasi = "\n💬 ".join(narasi_parts)
 
     # ── Momentum / sideways detection ────────────────────────────────
     momentum_label, is_sideways = _momentum_label(adx_val)
@@ -443,6 +498,8 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         "is_exhaustion":    is_exhaustion,
         "move_from_high":   move_from_high,
         "move_from_low":    move_from_low,
+        "pullback_pips":    pullback_pips,
+        "pullback_size":    pullback_size,
     }
 
 
