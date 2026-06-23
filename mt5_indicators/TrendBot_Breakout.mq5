@@ -2,55 +2,48 @@
 //| TrendBot_Breakout.mq5                                            |
 //| Deteksi pola kompresi + sinyal breakout                          |
 //|                                                                  |
-//| Pola yang dideteksi:                                             |
-//|   - Descending Triangle : resistance turun, support flat         |
-//|   - Ascending Triangle  : support naik, resistance flat          |
-//|   - Wedge               : resistance turun + support naik        |
-//|   - Range               : sideways sempit                        |
-//|                                                                  |
+//| Pola: Descending Triangle, Ascending Triangle, Wedge, Range      |
 //| Visual:                                                          |
-//|   - Kotak kuning = zona kompresi aktif                           |
-//|   - Garis merah  = resistance (bisa miring)                      |
-//|   - Garis hijau  = support (bisa miring)                         |
-//|   - Panah BIRU ↑ = BUY breakout konfirmasi                      |
-//|   - Panah MERAH↓ = SELL breakdown konfirmasi                     |
-//|   - Label teks   = nama pola + range pip                         |
+//|   Kotak kuning  = zona kompresi aktif                            |
+//|   Garis merah   = resistance                                     |
+//|   Garis hijau   = support                                        |
+//|   Panah biru ↑  = BUY breakout                                   |
+//|   Panah merah ↓ = SELL breakdown                                 |
 //+------------------------------------------------------------------+
 #property copyright   ""
 #property version     "1.00"
+#property strict
 #property indicator_chart_window
 #property indicator_plots 0
 
-//── Input ────────────────────────────────────────────────────────────
-input int    InpLookback      = 30;     // Bar untuk scan kompresi
-input int    InpMinBars       = 8;      // Min bar kompres sebelum valid
-input double InpMaxRangePip   = 35.0;  // Max range zona (pip)
-input double InpBodyRatio     = 0.45;  // Body candle min untuk breakout
-input double InpAdxMin        = 18.0;  // ADX minimum
-input int    InpAdxPeriod     = 14;    // Period ADX
-input color  InpColorBuy      = clrDodgerBlue;   // Warna sinyal BUY
-input color  InpColorSell     = clrRed;           // Warna sinyal SELL
-input color  InpColorZone     = clrGold;          // Warna kotak kompresi
-input color  InpColorResist   = clrOrangeRed;     // Warna garis resistance
-input color  InpColorSupport  = clrLimeGreen;     // Warna garis support
-input bool   InpShowLabel     = true;             // Tampilkan label pola
-input bool   InpAlertOn       = true;             // Alert popup saat breakout
+//── Input ─────────────────────────────────────────────────────────
+input int    InpLookback    = 30;    // Bar untuk scan kompresi
+input int    InpMinBars     = 8;     // Min bar kompres sebelum valid
+input double InpMaxRangePip = 35.0; // Max range zona (pip)
+input double InpBodyRatio   = 0.45; // Body candle min (breakout)
+input double InpAdxMin      = 18.0; // ADX minimum
+input int    InpAdxPeriod   = 14;   // Period ADX
+input color  InpColorBuy    = clrDodgerBlue;
+input color  InpColorSell   = clrRed;
+input color  InpColorZone   = clrGold;
+input color  InpColorResist = clrOrangeRed;
+input color  InpColorSupport= clrLimeGreen;
+input bool   InpShowLabel   = true;
+input bool   InpAlertOn     = true;
 
-//── Variabel global ──────────────────────────────────────────────────
-double pip_size;
-datetime _last_alert_buy  = 0;
-datetime _last_alert_sell = 0;
-int      _obj_counter     = 0;
+//── Global ────────────────────────────────────────────────────────
+double   g_pip;
+datetime g_last_buy  = 0;
+datetime g_last_sell = 0;
 
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   // Deteksi pip size
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   pip_size = (point >= 0.01) ? 1.0 : point * 10.0;
+   g_pip = (point >= 0.01) ? 1.0 : point * 10.0;
 
    IndicatorSetString(INDICATOR_SHORTNAME,
-      StringFormat("TrendBot Breakout (%d bar, max %.0f pip)", InpLookback, InpMaxRangePip));
+      StringFormat("TrendBot Breakout (%d bar / %.0f pip)", InpLookback, InpMaxRangePip));
    return INIT_SUCCEEDED;
 }
 
@@ -61,8 +54,8 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-int OnCalculate(const int rates_total,
-                const int prev_calculated,
+int OnCalculate(const int      rates_total,
+                const int      prev_calculated,
                 const datetime &time[],
                 const double   &open[],
                 const double   &high[],
@@ -72,153 +65,137 @@ int OnCalculate(const int rates_total,
                 const long     &volume[],
                 const int      &spread[])
 {
-   if (rates_total < InpLookback + 10) return rates_total;
+   if (rates_total < InpLookback + 10)
+      return 0;
 
-   int limit = (prev_calculated == 0) ? rates_total - InpLookback - 5 : rates_total - prev_calculated + 1;
-   if (limit <= 0) limit = 1;
+   // Set sebagai series — index 0 = candle terbaru
+   ArraySetAsSeries(time,  true);
+   ArraySetAsSeries(open,  true);
+   ArraySetAsSeries(high,  true);
+   ArraySetAsSeries(low,   true);
+   ArraySetAsSeries(close, true);
 
-   for (int i = limit; i >= 1; i--)
+   // Hanya proses bar terbaru (real-time) + sedikit ke belakang
+   int limit = (prev_calculated == 0) ? MathMin(rates_total - InpLookback - 5, 300) : 3;
+
+   for (int i = 1; i <= limit; i++)
    {
-      int bar = i;  // candle yang sedang dievaluasi (1 = candle terakhir selesai)
+      if (i + InpLookback >= rates_total) continue;
 
-      // Kumpulkan window
-      int start = bar + InpLookback - 1;
-      if (start >= rates_total) continue;
+      // Kumpulkan swing high/low dalam window [i .. i+lookback]
+      double res = 0, sup = 999999;
+      double r_first = 0, r_last = 0, s_first = 0, s_last = 0;
+      int    r_count = 0, s_count = 0;
 
-      // Cari swing high/low dalam window
-      double swing_highs[];
-      double swing_lows[];
-      datetime swing_high_time[];
-      datetime swing_low_time[];
-      ArrayResize(swing_highs, 0);
-      ArrayResize(swing_lows,  0);
-      ArrayResize(swing_high_time, 0);
-      ArrayResize(swing_low_time,  0);
-
-      for (int j = start; j >= bar + 2; j--)
+      for (int j = i + 1; j < i + InpLookback - 2 && j + 2 < rates_total; j++)
       {
-         if (j + 2 >= rates_total || j - 2 < 0) continue;
          // Swing high
-         if (high[j] > high[j+1] && high[j] > high[j+2] &&
-             high[j] > high[j-1] && high[j] > high[j-2])
+         if (high[j] > high[j-1] && high[j] > high[j+1] &&
+             high[j] > high[j-2] && high[j] > high[j+2])
          {
-            int sz = ArraySize(swing_highs);
-            ArrayResize(swing_highs,    sz + 1);
-            ArrayResize(swing_high_time, sz + 1);
-            swing_highs[sz]     = high[j];
-            swing_high_time[sz] = time[j];
+            if (r_count == 0) { r_first = high[j]; r_last = high[j]; }
+            else              { r_last  = high[j]; }
+            if (high[j] > res) res = high[j];
+            r_count++;
          }
          // Swing low
-         if (low[j] < low[j+1] && low[j] < low[j+2] &&
-             low[j] < low[j-1] && low[j] < low[j-2])
+         if (low[j] < low[j-1] && low[j] < low[j+1] &&
+             low[j] < low[j-2] && low[j] < low[j+2])
          {
-            int sz = ArraySize(swing_lows);
-            ArrayResize(swing_lows,    sz + 1);
-            ArrayResize(swing_low_time, sz + 1);
-            swing_lows[sz]     = low[j];
-            swing_low_time[sz] = time[j];
+            if (s_count == 0) { s_first = low[j]; s_last = low[j]; }
+            else              { s_last  = low[j]; }
+            if (low[j] < sup) sup = low[j];
+            s_count++;
          }
       }
 
-      // Butuh minimal 2 swing high dan 2 swing low
-      int nh = ArraySize(swing_highs);
-      int nl = ArraySize(swing_lows);
+      // Fallback jika swing tidak cukup
+      if (r_count < 2 || s_count < 2)
+      {
+         res = 0; sup = 999999;
+         for (int j = i; j < i + InpLookback && j < rates_total; j++)
+         {
+            if (high[j] > res) res = high[j];
+            if (low[j]  < sup) sup = low[j];
+         }
+         r_first = r_last = res;
+         s_first = s_last = sup;
+      }
 
-      double resistance, support, r_change, s_change;
+      if (res <= 0 || sup >= 999998) continue;
+
+      double range_pip = (res - sup) / g_pip;
+      if (range_pip > InpMaxRangePip || range_pip < 3.0) continue;
+
+      // Deteksi pola
+      double r_change = r_first - r_last;  // positif = resistance turun (first lebih baru)
+      double s_change = s_first - s_last;  // negatif = support naik
+
       string pattern;
-
-      if (nh >= 2 && nl >= 2)
-      {
-         resistance = swing_highs[0];    // swing high terbaru
-         support    = swing_lows[0];     // swing low terbaru
-         r_change   = swing_highs[0] - swing_highs[nh-1];  // negatif = turun
-         s_change   = swing_lows[0]  - swing_lows[nl-1];   // positif = naik
-
-         double range_pip = (resistance - support) / pip_size;
-         if (range_pip > InpMaxRangePip) continue;
-
-         if (r_change < -pip_size * 2 && MathAbs(s_change) < pip_size * 3)
-            pattern = "Descending Triangle";
-         else if (s_change > pip_size * 2 && MathAbs(r_change) < pip_size * 3)
-            pattern = "Ascending Triangle";
-         else if (r_change < -pip_size && s_change > pip_size)
-            pattern = "Wedge";
-         else
-            pattern = "Range";
-      }
+      if (r_change > g_pip * 2 && MathAbs(s_change) < g_pip * 3)
+         pattern = "Descending Triangle";
+      else if (s_change < -g_pip * 2 && MathAbs(r_change) < g_pip * 3)
+         pattern = "Ascending Triangle";
+      else if (r_change > g_pip && s_change < -g_pip)
+         pattern = "Wedge";
       else
-      {
-         // Fallback: simple high/low range
-         resistance = 0; support = 999999;
-         for (int j = start; j >= bar; j--)
-         {
-            if (high[j] > resistance) resistance = high[j];
-            if (low[j]  < support)   support    = low[j];
-         }
-         double range_pip = (resistance - support) / pip_size;
-         if (range_pip > InpMaxRangePip) continue;
-         pattern   = "Range";
-         r_change  = 0;
-         s_change  = 0;
-      }
+         pattern = "Range";
 
-      double range_pip = (resistance - support) / pip_size;
-
-      // Cek ADX pada bar ini
-      double adx_val = _GetAdx(bar, rates_total, high, low, close);
+      // ADX
+      double adx_val = CalcAdx(i, rates_total, high, low, close);
       if (adx_val < InpAdxMin) continue;
 
-      // Gambar zona kompresi (hanya sekali per zona)
-      if (bar == 1)
+      // Gambar zona aktif (hanya di bar terbaru i=1)
+      if (i == 1)
       {
-         _DrawZone(time[start], time[bar], resistance, support, range_pip, pattern);
+         DrawZone(time[i + InpLookback - 1], time[i], res, sup, range_pip, pattern, adx_val);
       }
 
-      // Cek breakout pada candle [bar]
-      double o = open[bar], h = high[bar], l = low[bar], c = close[bar];
-      double body      = MathAbs(c - o);
-      double full_range = h - l;
+      // Cek breakout pada candle [i]
+      double o_c = open[i], h_c = high[i], l_c = low[i], c_c = close[i];
+      double body       = MathAbs(c_c - o_c);
+      double full_range = h_c - l_c;
       if (full_range < 0.001) continue;
-      bool body_ok = (body / full_range) >= InpBodyRatio;
+      bool   body_ok = (full_range > 0) && (body / full_range >= InpBodyRatio);
 
       // BUY breakout
-      if (c > resistance + pip_size && body_ok && c > o)
+      if (c_c > res + g_pip && body_ok && c_c > o_c)
       {
-         string sig_name = StringFormat("TBB_BUY_%d", bar);
-         if (ObjectFind(0, sig_name) < 0)
+         string nm = StringFormat("TBB_BUY_%d", (int)time[i]);
+         if (ObjectFind(0, nm) < 0)
          {
-            _DrawArrow(sig_name, time[bar], l - pip_size * 3, true);
+            DrawArrow(nm, time[i], l_c - g_pip * 4, true);
             if (InpShowLabel)
-               _DrawLabel(StringFormat("TBB_LBL_B_%d", bar),
-                          time[bar], l - pip_size * 6,
-                          StringFormat("BUY ↑ %.1f pip\n%s", range_pip, pattern),
-                          InpColorBuy);
-            if (InpAlertOn && time[bar] > _last_alert_buy)
+               DrawText(StringFormat("TBB_LBLB_%d", (int)time[i]),
+                        time[i], l_c - g_pip * 8,
+                        StringFormat("BUY %.1f pip | %s", range_pip, pattern),
+                        InpColorBuy);
+            if (InpAlertOn && time[i] > g_last_buy)
             {
-               Alert(StringFormat("TrendBot Breakout: BUY %s | %s | Range=%.1f pip | ADX=%.1f",
-                     _Symbol, pattern, range_pip, adx_val));
-               _last_alert_buy = time[bar];
+               Alert(StringFormat("TrendBot BUY Breakout | %s | %s | Range=%.1f pip | ADX=%.1f",
+                                  _Symbol, pattern, range_pip, adx_val));
+               g_last_buy = time[i];
             }
          }
       }
 
       // SELL breakdown
-      if (c < support - pip_size && body_ok && c < o)
+      if (c_c < sup - g_pip && body_ok && c_c < o_c)
       {
-         string sig_name = StringFormat("TBB_SELL_%d", bar);
-         if (ObjectFind(0, sig_name) < 0)
+         string nm = StringFormat("TBB_SELL_%d", (int)time[i]);
+         if (ObjectFind(0, nm) < 0)
          {
-            _DrawArrow(sig_name, time[bar], h + pip_size * 3, false);
+            DrawArrow(nm, time[i], h_c + g_pip * 4, false);
             if (InpShowLabel)
-               _DrawLabel(StringFormat("TBB_LBL_S_%d", bar),
-                          time[bar], h + pip_size * 7,
-                          StringFormat("SELL ↓ %.1f pip\n%s", range_pip, pattern),
-                          InpColorSell);
-            if (InpAlertOn && time[bar] > _last_alert_sell)
+               DrawText(StringFormat("TBB_LBLS_%d", (int)time[i]),
+                        time[i], h_c + g_pip * 8,
+                        StringFormat("SELL %.1f pip | %s", range_pip, pattern),
+                        InpColorSell);
+            if (InpAlertOn && time[i] > g_last_sell)
             {
-               Alert(StringFormat("TrendBot Breakout: SELL %s | %s | Range=%.1f pip | ADX=%.1f",
-                     _Symbol, pattern, range_pip, adx_val));
-               _last_alert_sell = time[bar];
+               Alert(StringFormat("TrendBot SELL Breakdown | %s | %s | Range=%.1f pip | ADX=%.1f",
+                                  _Symbol, pattern, range_pip, adx_val));
+               g_last_sell = time[i];
             }
          }
       }
@@ -228,106 +205,109 @@ int OnCalculate(const int rates_total,
 }
 
 //+------------------------------------------------------------------+
-double _GetAdx(int bar, int rates_total,
+double CalcAdx(int bar, int total,
                const double &high[], const double &low[], const double &close[])
 {
-   int period = InpAdxPeriod;
-   if (bar + period * 2 >= rates_total) return 0;
+   int p = InpAdxPeriod;
+   if (bar + p * 2 + 2 >= total) return 0;
 
-   double tr_sum = 0, dmp_sum = 0, dmm_sum = 0;
-   for (int i = bar + period; i > bar; i--)
+   double tr_s = 0, dp_s = 0, dm_s = 0;
+   for (int k = bar + 1; k <= bar + p; k++)
    {
-      double tr  = MathMax(high[i] - low[i],
-                  MathMax(MathAbs(high[i] - close[i+1]),
-                          MathAbs(low[i]  - close[i+1])));
-      double dmp = (high[i] - high[i+1] > low[i+1] - low[i] && high[i] - high[i+1] > 0)
-                   ? high[i] - high[i+1] : 0;
-      double dmm = (low[i+1] - low[i] > high[i] - high[i+1] && low[i+1] - low[i] > 0)
-                   ? low[i+1] - low[i] : 0;
-      tr_sum  += tr;
-      dmp_sum += dmp;
-      dmm_sum += dmm;
+      if (k + 1 >= total) break;
+      double tr  = MathMax(high[k] - low[k],
+                   MathMax(MathAbs(high[k] - close[k+1]),
+                           MathAbs(low[k]  - close[k+1])));
+      double dp  = (high[k] - high[k+1] > 0 && high[k] - high[k+1] > low[k+1] - low[k])
+                   ? high[k] - high[k+1] : 0;
+      double dm  = (low[k+1] - low[k] > 0 && low[k+1] - low[k] > high[k] - high[k+1])
+                   ? low[k+1] - low[k] : 0;
+      tr_s += tr; dp_s += dp; dm_s += dm;
    }
-   if (tr_sum < 0.0001) return 0;
-   double dip = 100 * dmp_sum / tr_sum;
-   double dim = 100 * dmm_sum / tr_sum;
-   double dx  = (dip + dim > 0) ? 100 * MathAbs(dip - dim) / (dip + dim) : 0;
-   return dx;
+   if (tr_s < 0.0001) return 0;
+   double dip = 100.0 * dp_s / tr_s;
+   double dim = 100.0 * dm_s / tr_s;
+   double sum = dip + dim;
+   return (sum > 0) ? 100.0 * MathAbs(dip - dim) / sum : 0;
 }
 
 //+------------------------------------------------------------------+
-void _DrawZone(datetime t_start, datetime t_end,
-               double resistance, double support,
-               double range_pip, string pattern)
+void DrawZone(datetime t1, datetime t2,
+              double res, double sup,
+              double range_pip, string pattern, double adx)
 {
-   // Hapus zona lama
-   ObjectsDeleteAll(0, "TBB_ZONE_");
-   ObjectsDeleteAll(0, "TBB_RES_");
-   ObjectsDeleteAll(0, "TBB_SUP_");
-   ObjectsDeleteAll(0, "TBB_INFO_");
+   ObjectsDeleteAll(0, "TBB_ZONE");
+   ObjectsDeleteAll(0, "TBB_RES");
+   ObjectsDeleteAll(0, "TBB_SUP");
+   ObjectsDeleteAll(0, "TBB_INFO");
 
-   // Kotak kompresi
-   string zname = "TBB_ZONE_box";
-   ObjectCreate(0, zname, OBJ_RECTANGLE, 0, t_start, resistance, t_end, support);
-   ObjectSetInteger(0, zname, OBJPROP_COLOR,   InpColorZone);
-   ObjectSetInteger(0, zname, OBJPROP_STYLE,   STYLE_DOT);
-   ObjectSetInteger(0, zname, OBJPROP_WIDTH,   1);
-   ObjectSetInteger(0, zname, OBJPROP_FILL,    true);
-   ObjectSetInteger(0, zname, OBJPROP_BACK,    true);
-   ObjectSetDouble (0, zname, OBJPROP_PRICE, 0, resistance);
-   ObjectSetDouble (0, zname, OBJPROP_PRICE, 1, support);
-   // Transparansi — gunakan alpha via back color
-   ObjectSetInteger(0, zname, OBJPROP_BGCOLOR,
-      ColorToARGB(InpColorZone, 30));  // 30/255 opacity
+   // Kotak zona
+   string zn = "TBB_ZONE_box";
+   if (ObjectCreate(0, zn, OBJ_RECTANGLE, 0, t1, res, t2, sup))
+   {
+      ObjectSetInteger(0, zn, OBJPROP_COLOR, InpColorZone);
+      ObjectSetInteger(0, zn, OBJPROP_STYLE, STYLE_DOT);
+      ObjectSetInteger(0, zn, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(0, zn, OBJPROP_FILL,  true);
+      ObjectSetInteger(0, zn, OBJPROP_BACK,  true);
+   }
 
    // Garis resistance
-   string rname = "TBB_RES_line";
-   ObjectCreate(0, rname, OBJ_TREND, 0, t_start, resistance, t_end, resistance);
-   ObjectSetInteger(0, rname, OBJPROP_COLOR, InpColorResist);
-   ObjectSetInteger(0, rname, OBJPROP_WIDTH, 2);
-   ObjectSetInteger(0, rname, OBJPROP_STYLE, STYLE_SOLID);
-   ObjectSetInteger(0, rname, OBJPROP_RAY_RIGHT, false);
+   string rn = "TBB_RES_line";
+   if (ObjectCreate(0, rn, OBJ_TREND, 0, t1, res, t2, res))
+   {
+      ObjectSetInteger(0, rn, OBJPROP_COLOR,     InpColorResist);
+      ObjectSetInteger(0, rn, OBJPROP_WIDTH,     2);
+      ObjectSetInteger(0, rn, OBJPROP_STYLE,     STYLE_SOLID);
+      ObjectSetInteger(0, rn, OBJPROP_RAY_RIGHT, false);
+   }
 
    // Garis support
-   string sname = "TBB_SUP_line";
-   ObjectCreate(0, sname, OBJ_TREND, 0, t_start, support, t_end, support);
-   ObjectSetInteger(0, sname, OBJPROP_COLOR, InpColorSupport);
-   ObjectSetInteger(0, sname, OBJPROP_WIDTH, 2);
-   ObjectSetInteger(0, sname, OBJPROP_STYLE, STYLE_SOLID);
-   ObjectSetInteger(0, sname, OBJPROP_RAY_RIGHT, false);
+   string sn = "TBB_SUP_line";
+   if (ObjectCreate(0, sn, OBJ_TREND, 0, t1, sup, t2, sup))
+   {
+      ObjectSetInteger(0, sn, OBJPROP_COLOR,     InpColorSupport);
+      ObjectSetInteger(0, sn, OBJPROP_WIDTH,     2);
+      ObjectSetInteger(0, sn, OBJPROP_STYLE,     STYLE_SOLID);
+      ObjectSetInteger(0, sn, OBJPROP_RAY_RIGHT, false);
+   }
 
-   // Label info zona
+   // Label
    if (InpShowLabel)
    {
-      string iname = "TBB_INFO_label";
-      double mid   = (resistance + support) / 2.0;
-      ObjectCreate(0, iname, OBJ_TEXT, 0, t_end, resistance + pip_size * 2);
-      ObjectSetString (0, iname, OBJPROP_TEXT,
-         StringFormat("%s | %.1f pip | ADX>%.0f", pattern, range_pip, InpAdxMin));
-      ObjectSetInteger(0, iname, OBJPROP_COLOR,    InpColorZone);
-      ObjectSetInteger(0, iname, OBJPROP_FONTSIZE,  8);
-      ObjectSetString (0, iname, OBJPROP_FONT,      "Arial Bold");
-      ObjectSetInteger(0, iname, OBJPROP_ANCHOR,    ANCHOR_LEFT_LOWER);
+      string in = "TBB_INFO_txt";
+      if (ObjectCreate(0, in, OBJ_TEXT, 0, t2, res + g_pip * 2))
+      {
+         ObjectSetString (0, in, OBJPROP_TEXT,
+            StringFormat("%s | %.1f pip | ADX %.0f", pattern, range_pip, adx));
+         ObjectSetInteger(0, in, OBJPROP_COLOR,    InpColorZone);
+         ObjectSetInteger(0, in, OBJPROP_FONTSIZE,  9);
+         ObjectSetString (0, in, OBJPROP_FONT,      "Arial Bold");
+         ObjectSetInteger(0, in, OBJPROP_ANCHOR,    ANCHOR_LEFT_LOWER);
+      }
    }
 }
 
 //+------------------------------------------------------------------+
-void _DrawArrow(string name, datetime t, double price, bool is_buy)
+void DrawArrow(string name, datetime t, double price, bool is_buy)
 {
-   ObjectCreate(0, name, OBJ_ARROW, 0, t, price);
-   ObjectSetInteger(0, name, OBJPROP_ARROWCODE, is_buy ? 233 : 234);  // 233=↑, 234=↓
-   ObjectSetInteger(0, name, OBJPROP_COLOR,  is_buy ? InpColorBuy : InpColorSell);
-   ObjectSetInteger(0, name, OBJPROP_WIDTH,  3);
-   ObjectSetInteger(0, name, OBJPROP_ANCHOR, is_buy ? ANCHOR_TOP : ANCHOR_BOTTOM);
+   if (ObjectCreate(0, name, OBJ_ARROW, 0, t, price))
+   {
+      ObjectSetInteger(0, name, OBJPROP_ARROWCODE, is_buy ? 233 : 234);
+      ObjectSetInteger(0, name, OBJPROP_COLOR,     is_buy ? InpColorBuy : InpColorSell);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH,     3);
+   }
 }
 
 //+------------------------------------------------------------------+
-void _DrawLabel(string name, datetime t, double price, string txt, color clr)
+void DrawText(string name, datetime t, double price, string txt, color clr)
 {
-   ObjectCreate(0, name, OBJ_TEXT, 0, t, price);
-   ObjectSetString (0, name, OBJPROP_TEXT,     txt);
-   ObjectSetInteger(0, name, OBJPROP_COLOR,    clr);
-   ObjectSetInteger(0, name, OBJPROP_FONTSIZE,  8);
-   ObjectSetString (0, name, OBJPROP_FONT,      "Arial Bold");
-   ObjectSetInteger(0, name, OBJPROP_ANCHOR,    ANCHOR_LEFT_UPPER);
+   if (ObjectCreate(0, name, OBJ_TEXT, 0, t, price))
+   {
+      ObjectSetString (0, name, OBJPROP_TEXT,     txt);
+      ObjectSetInteger(0, name, OBJPROP_COLOR,    clr);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE,  8);
+      ObjectSetString (0, name, OBJPROP_FONT,      "Arial Bold");
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR,    ANCHOR_LEFT_UPPER);
+   }
 }
