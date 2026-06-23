@@ -192,31 +192,54 @@ def notify_alert_manual(
     sl: float,
     tp1: float,
     tp2: float,
+    tp3: float,
     missing: list[str],
+    move_label: str = "",
+    ema20: float = 0,
+    ema50: float = 0,
+    high_m15: float = 0,
+    low_m15: float = 0,
 ):
-    """
-    Notif manual entry alert — dikirim saat filter >= 7/8.
-    Hanya dikirim sekali per kondisi (throttle di scan_log).
-    """
-    arrow = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+    from datetime import datetime
+    arrow      = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+    now_str    = datetime.now().strftime("%H:%M")
+    sl_dist    = abs(entry - sl)
+    tp1_dist   = abs(tp1 - entry)
+    tp2_dist   = abs(tp2 - entry)
+    tp3_dist   = abs(tp3 - entry)
+    rr1        = tp1_dist / sl_dist if sl_dist else 0
+    rr2        = tp2_dist / sl_dist if sl_dist else 0
+    filter_bar = "🟩" * passed + "⬜" * (total - passed)
     missing_str = "\n".join(f"  ⚠️ {m}" for m in missing) if missing else "  ✅ Semua filter lolos"
-    msg = (
-        f"⚡ *ALERT MANUAL — {symbol}* ({passed}/{total})\n"
-        f"\n"
-        f"Arah     : {arrow}\n"
-        f"ADX      : `{adx:.1f}` | ATR: `{atr_val:.2f}` / MA `{atr_ma:.2f}`\n"
-        f"Struktur : `{struct_short}` | Candle: `{candle_short}`\n"
-        f"\n"
-        f"Entry    : `{entry:.2f}`\n"
-        f"SL       : `{sl:.2f}`\n"
-        f"TP1      : `{tp1:.2f}`\n"
-        f"TP2      : `{tp2:.2f}`\n"
-        f"\n"
-        f"*Belum lolos:*\n{missing_str}\n"
-        f"\n"
-        f"_Entry manual jika filter terpenuhi_"
-    )
-    send(msg)
+
+    lines = [
+        f"⚡ *ALERT MANUAL — {symbol}* `{now_str}`",
+        f"",
+        f"*Arah*     : {arrow}  `{passed}/{total}` {filter_bar}",
+        f"*Gerakan*  : {move_label or '—'}",
+        f"*Struktur* : `{struct_short}` | Candle `{candle_short}`",
+        f"*ADX*      : `{adx:.1f}` | ATR `{atr_val:.2f}` / MA `{atr_ma:.2f}`",
+    ]
+
+    if ema20 or ema50:
+        lines.append(f"*EMA H1*   : EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}`")
+    if high_m15 or low_m15:
+        lines.append(f"*Range M15*: High `{high_m15:.2f}` — Low `{low_m15:.2f}`")
+
+    lines += [
+        f"",
+        f"*Entry*  : `{entry:.2f}`",
+        f"*SL*     : `{sl:.2f}`  ({sl_dist:.1f} pip)",
+        f"*TP1*    : `{tp1:.2f}`  (+{tp1_dist:.1f} pip | RR 1:{rr1:.1f})",
+        f"*TP2*    : `{tp2:.2f}`  (+{tp2_dist:.1f} pip | RR 1:{rr2:.1f})",
+        f"*TP3*    : `{tp3:.2f}`  (+{tp3_dist:.1f} pip | trailing)",
+        f"",
+        f"*Belum lolos:*",
+        missing_str,
+        f"",
+        f"_Entry manual sekarang atau tunggu filter penuh_",
+    ]
+    send("\n".join(lines))
 
 
 def notify_trail_exit(ticket: int, symbol: str, price: float, pnl: float):

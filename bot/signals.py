@@ -172,6 +172,23 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
                 else:
                     tp1_price = entry_price + sl_dist * config.TP1_R if direction == "BUY" else entry_price - sl_dist * config.TP1_R
                     tp2_price = entry_price + sl_dist * config.TP2_R if direction == "BUY" else entry_price - sl_dist * config.TP2_R
+                # TP3
+                if config.TP_MODE == "pips":
+                    tp3_price = entry_price + config.TP3_PIPS * pip_size if direction == "BUY" else entry_price - config.TP3_PIPS * pip_size
+                else:
+                    tp3_price = tp2_price
+
+                # Gerakan saat ini
+                ema20_h1 = last_h1.get("ema20", 0)
+                ema50_h1 = last_h1.get("ema50", 0)
+                if direction == "SELL":
+                    move_label = "Pullback naik (retracement)" if entry_price > ema50_h1 else "Lanjut turun"
+                else:
+                    move_label = "Pullback turun (retracement)" if entry_price < ema50_h1 else "Lanjut naik"
+
+                high_m15 = df_m15["high"].tail(20).max() if df_m15 is not None else 0
+                low_m15  = df_m15["low"].tail(20).min()  if df_m15 is not None else 0
+
                 telegram.notify_alert_manual(
                     direction=direction,
                     symbol=config.SYMBOL,
@@ -186,7 +203,13 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
                     sl=sl_price,
                     tp1=tp1_price,
                     tp2=tp2_price,
+                    tp3=tp3_price,
                     missing=missing,
+                    move_label=move_label,
+                    ema20=ema20_h1,
+                    ema50=ema50_h1,
+                    high_m15=high_m15,
+                    low_m15=low_m15,
                 )
                 _alert_sent_at[key] = now
                 log_console(f"[SCAN] ⚡ Alert manual dikirim ke Telegram ({passed}/{total})")
