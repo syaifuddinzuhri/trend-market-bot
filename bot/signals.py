@@ -284,8 +284,10 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
     tick = mt5.symbol_info_tick(config.SYMBOL)
     current_price = tick.bid if tick else close_m15
 
+    sym_info = mt5.symbol_info(config.SYMBOL)
+    pip_size = max(sym_info.point * 10, 0.1) if sym_info else 0.1
+
     # ── Deteksi kondisi sekarang ─────────────────────────────────────
-    # Gerakan harga vs EMA50 H1 — apakah sedang pullback atau continuation
     if direction == "SELL":
         is_pullback_now = current_price > ema50_h1
         move_label = "Pullback naik (retracement)" if is_pullback_now else "Lanjut turun"
@@ -296,6 +298,46 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         move_label = "Ranging / tidak jelas"
         is_pullback_now = False
 
+    # ── Seberapa jauh harga dari high/low 20-bar ─────────────────────
+    move_from_high = (high_m15 - current_price) / pip_size   # pip turun dari high
+    move_from_low  = (current_price - low_m15)  / pip_size   # pip naik dari low
+
+    # ── Deteksi exhaustion (candle kecil) ────────────────────────────
+    last5 = df_m15.tail(5)
+    avg_body = (abs(last5["close"] - last5["open"]) / pip_size).mean()
+    is_exhaustion = avg_body < atr_val / pip_size * 0.3   # body < 30% ATR = konsolidasi
+
+    # ── Zona bounce/re-entry ──────────────────────────────────────────
+    if direction == "SELL" and not is_pullback_now:
+        # Harga lanjut turun → zona SELL ulang jika ada bounce ke EMA
+        bounce_low  = min(ema20_h1, current_price + atr_val * 0.5)
+        bounce_high = max(ema20_h1, current_price + atr_val * 1.0)
+        bounce_zone = f"{bounce_low:.2f}–{bounce_high:.2f}"
+    elif direction == "BUY" and not is_pullback_now:
+        bounce_low  = min(ema20_h1, current_price - atr_val * 1.0)
+        bounce_high = max(ema20_h1, current_price - atr_val * 0.5)
+        bounce_zone = f"{bounce_low:.2f}–{bounce_high:.2f}"
+    else:
+        bounce_zone = ""
+
+    # ── Narasi situasi ────────────────────────────────────────────────
+    narasi_parts = []
+    if direction == "SELL":
+        narasi_parts.append(f"Harga turun {move_from_high:.0f} pip dari high {high_m15:.2f}")
+    elif direction == "BUY":
+        narasi_parts.append(f"Harga naik {move_from_low:.0f} pip dari low {low_m15:.2f}")
+
+    if is_exhaustion:
+        narasi_parts.append(f"Candle kecil (avg body {avg_body:.1f} pip) — kemungkinan konsolidasi/exhaustion")
+        if bounce_zone:
+            label = "SELL" if direction == "SELL" else "BUY"
+            narasi_parts.append(f"Jika bounce ke {bounce_zone} → peluang {label} ulang")
+    else:
+        body_avg = avg_body
+        narasi_parts.append(f"Candle aktif (avg body {body_avg:.1f} pip) — momentum masih ada")
+
+    narasi = " | ".join(narasi_parts)
+
     # ── Momentum / sideways detection ────────────────────────────────
     momentum_label, is_sideways = _momentum_label(adx_val)
 
@@ -305,9 +347,6 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
     missing_filters = [filter_names[i] for i, v in enumerate(filter_vals) if not v]
 
     # ── Rekomendasi ──────────────────────────────────────────────────
-    sym_info = mt5.symbol_info(config.SYMBOL)
-    pip_size = max(sym_info.point * 10, 0.1) if sym_info else 0.1
-
     entry_zone = sl_level = tp1_level = tp2_level = ""
 
     def _levels(ref, d):
@@ -399,6 +438,11 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         "missing_filters":  missing_filters,
         "momentum_label":   momentum_label,
         "is_sideways":      is_sideways,
+        "narasi":           narasi,
+        "bounce_zone":      bounce_zone,
+        "is_exhaustion":    is_exhaustion,
+        "move_from_high":   move_from_high,
+        "move_from_low":    move_from_low,
     }
 
 

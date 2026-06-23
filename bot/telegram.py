@@ -118,6 +118,9 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
     low20     = data.get("low_m15", 0)
     move      = data.get("move_label", "")
     momentum  = data.get("momentum_label", "")
+    narasi    = data.get("narasi", "")
+    bounce    = data.get("bounce_zone", "")
+    exhaustion= data.get("is_exhaustion", False)
     rec       = data.get("recommendation", "")
     entry_z   = data.get("entry_zone", "")
     sl_l      = data.get("sl_level", "")
@@ -144,9 +147,12 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
         f"*Level EMA* : EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}`",
         f"*Range M15* : High `{high20:.2f}` — Low `{low20:.2f}`",
         f"*Filter*    : {filter_icon} `{passed}/{total}` lolos",
-        f"",
-        f"📌 *{rec}*",
     ]
+
+    if narasi:
+        lines += ["", f"💬 {narasi}"]
+
+    lines += ["", f"📌 *{rec}*"]
 
     if missing:
         lines.append(f"❌ Belum lolos: `{'`, `'.join(missing)}`")
