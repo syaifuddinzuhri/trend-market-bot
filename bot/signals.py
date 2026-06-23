@@ -24,6 +24,7 @@ from bot.session import is_trading_session
 from bot.news_filter import is_news_lock
 from bot.logger import log_console
 from bot import telegram
+from bot.mt5_zones import load_zones, price_in_zone, zones_summary, nearest_zones
 
 _ADX_CHOCH_BONUS = 5
 
@@ -162,6 +163,31 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
         for m in missing:
             log_console(f"[SCAN]   ↳ {m}")
 
+    # ── Cek zona S/R yang di-draw di MT5 ─────────────────────────
+    mt5_zones = load_zones()
+    zone_hit  = None
+    zone_info = ""
+    if mt5_zones and direction in ("BUY", "SELL"):
+        try:
+            tick_z = mt5.symbol_info_tick(config.SYMBOL)
+            if tick_z:
+                from bot.risk import get_pip_size as _gpz
+                _pz = _gpz(config.SYMBOL)
+                _cp = tick_z.bid
+                zone_hit = price_in_zone(mt5_zones, _cp, direction, tolerance=_pz * 2)
+                if zone_hit:
+                    zone_info = (
+                        f"📦 Zona S/R: *{zone_hit.get('label') or zone_hit['zone_type']}* "
+                        f"`{zone_hit['low']:.2f}`–`{zone_hit['high']:.2f}`"
+                    )
+                    log_console(
+                        f"[SCAN] 📦 Harga di zona {zone_hit['zone_type']} "
+                        f"{zone_hit['low']:.2f}–{zone_hit['high']:.2f} "
+                        f"({zone_hit.get('label', '')})"
+                    )
+        except Exception:
+            pass
+
     # ── Alert manual ke Telegram jika >= ALERT_MIN_FILTERS ───────
     if passed >= ALERT_MIN_FILTERS and direction in ("BUY", "SELL"):
         import time as _t
@@ -232,6 +258,7 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
                     high_m15=high_m15,
                     low_m15=low_m15,
                     adverse_warning=adverse_warning,
+                    zone_info=zone_info,
                 )
                 _alert_sent_at[key]    = now
                 _alert_last_price[key] = entry_price
@@ -548,6 +575,16 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
     else:
         tp3_level = ""
 
+    # ── Zona S/R dari MT5 rectangle ──────────────────────────────────
+    mt5_zones_data = load_zones()
+    drawn_zone     = None
+    nearby_zones   = []
+    zones_str      = ""
+    if mt5_zones_data:
+        drawn_zone   = price_in_zone(mt5_zones_data, current_price, direction, tolerance=pip_size * 2)
+        nearby_zones = nearest_zones(mt5_zones_data, current_price, n=3)
+        zones_str    = zones_summary(mt5_zones_data, current_price, pip_size)
+
     # ── Yang perlu dipantau ────────────────────────────────────────────
     pantau = []
     if direction == "SELL":
@@ -609,6 +646,9 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         "pullback_pips":    pullback_pips,
         "pullback_size":    pullback_size,
         "pantau":           pantau,
+        "drawn_zone":       drawn_zone,
+        "nearby_zones":     nearby_zones,
+        "zones_str":        zones_str,
     }
 
 

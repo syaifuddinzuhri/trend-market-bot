@@ -5,6 +5,28 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.0] — 2026-06-23
+
+### Added
+- **Integrasi zona S/R dari rectangle MT5** — baca zona yang di-draw manual di MT5 sebagai
+  patokan entry/analisa:
+  - `mt5_indicators/ZoneExporter.mq5` — EA kecil yang export semua Rectangle ke `zones.csv`
+    di MT5 Common Files setiap 5 detik
+  - `bot/mt5_zones.py` — modul Python baca CSV, deteksi tipe zona (Supply/Demand/Neutral)
+    dari nama, label, atau warna rectangle; fungsi `price_in_zone()`, `nearest_zones()`,
+    `zones_summary()`
+  - Alert manual kini menampilkan zona aktif jika harga masuk ke dalam rectangle yang di-draw
+  - Analisa 5 menit menampilkan bagian **Zona S/R Aktif** (harga di dalam zona) atau
+    **Zona S/R Terdekat** (3 zona paling dekat) lengkap dengan jarak pip
+
+### Install ZoneExporter
+  1. Copy `mt5_indicators/ZoneExporter.mq5` ke `MQL5/Experts/` di folder data MT5
+  2. Compile di MetaEditor (F7)
+  3. Attach ke chart XAUUSD M15 (atau M5)
+  4. Pastikan "Allow automated trading" aktif
+
+---
+
 ## [2.0.9] — 2026-06-23
 
 ### Added

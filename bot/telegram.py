@@ -131,6 +131,8 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
     tp3_l      = data.get("tp3_level", "")
     missing    = data.get("missing_filters", [])
     pantau     = data.get("pantau", [])
+    drawn_zone = data.get("drawn_zone")
+    zones_str  = data.get("zones_str", "")
 
     arrow = "🟢 BUY" if direction == "BUY" else ("🔴 SELL" if direction == "SELL" else "⚪ SIDEWAYS")
     filter_icon = "✅" if passed >= total else ("🔥" if passed >= 6 else ("⏳" if passed >= 4 else "💤"))
@@ -172,6 +174,18 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
         lines.append(f"🔴 Momentum sangat kuat (ADX {adx:.1f}) — strong trend mode aktif")
     elif adx >= 25:
         lines.append(f"🟢 Momentum trending (ADX {adx:.1f})")
+
+    # ── Zona S/R dari MT5 ─────────────────────────────────────────
+    if drawn_zone:
+        zlabel = drawn_zone.get("label") or drawn_zone.get("zone_type", "")
+        lines += [
+            "",
+            f"*📦 Zona S/R Aktif:* `{zlabel}` "
+            f"`{drawn_zone['low']:.2f}`–`{drawn_zone['high']:.2f}` "
+            f"⚡ _Harga di dalam zona!_",
+        ]
+    elif zones_str:
+        lines += ["", f"*📦 Zona S/R Terdekat:* {zones_str}"]
 
     # ── Rekomendasi ────────────────────────────────────────────────
     lines += ["", "*📌 Rekomendasi:*"]
@@ -254,6 +268,7 @@ def notify_alert_manual(
     high_m15: float = 0,
     low_m15: float = 0,
     adverse_warning: str = "",
+    zone_info: str = "",
 ):
     from datetime import datetime
     arrow      = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
@@ -281,6 +296,9 @@ def notify_alert_manual(
         lines.append(f"*EMA H1*   : EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}`")
     if high_m15 or low_m15:
         lines.append(f"*Range M15*: High `{high_m15:.2f}` — Low `{low_m15:.2f}`")
+
+    if zone_info:
+        lines += ["", zone_info]
 
     if adverse_warning:
         lines += ["", adverse_warning]
