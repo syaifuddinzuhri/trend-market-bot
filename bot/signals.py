@@ -465,51 +465,86 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         entry_zone = f"{target - atr_val * 0.3:.2f}–{target:.2f}"
 
     else:
-        arrow_txt = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
         if direction == "SELL":
             next_action = f"Pantau apakah harga naik dulu ke EMA20 ({ema20_h1:.2f}) lalu balik turun"
         else:
             next_action = f"Pantau apakah harga turun dulu ke EMA20 ({ema20_h1:.2f}) lalu balik naik"
-        recommendation = (
-            f"👀 MONITOR {arrow_txt} — tunggu filter lengkap\n"
-            f"{next_action}"
-        )
+        recommendation = f"👀 MONITOR — tunggu filter lengkap\n{next_action}"
+
+    # ── TP3 level ─────────────────────────────────────────────────────
+    if entry_zone and direction in ("BUY", "SELL"):
+        try:
+            ref = float(entry_zone.split("–")[0])
+            if direction == "SELL":
+                tp3_level = f"{ref - config.TP3_PIPS * pip_size:.2f}"
+            else:
+                tp3_level = f"{ref + config.TP3_PIPS * pip_size:.2f}"
+        except Exception:
+            tp3_level = ""
+    else:
+        tp3_level = ""
+
+    # ── Yang perlu dipantau ────────────────────────────────────────────
+    pantau = []
+    if direction == "SELL":
+        if is_pullback_now:
+            pantau.append(f"Rejection di EMA20 `{ema20_h1:.2f}`–EMA50 `{ema50_h1:.2f}` → konfirmasi SELL")
+        if not is_pullback_now and not is_exhaustion:
+            pantau.append(f"Jika harga naik ke `{ema20_h1:.2f}` → cari pin bar/engulfing lalu SELL")
+        if is_exhaustion and bounce_zone:
+            pantau.append(f"Bounce ke `{bounce_zone}` → peluang SELL ulang")
+        pantau.append(f"Jika tembus `{high_m15:.2f}` (high 20 bar) → tren SELL bisa berbalik")
+    elif direction == "BUY":
+        if is_pullback_now:
+            pantau.append(f"Bounce di EMA20 `{ema20_h1:.2f}`–EMA50 `{ema50_h1:.2f}` → konfirmasi BUY")
+        if is_exhaustion and bounce_zone:
+            pantau.append(f"Pullback ke `{bounce_zone}` → peluang BUY ulang")
+        pantau.append(f"Jika tembus `{low_m15:.2f}` (low 20 bar) → tren BUY bisa berbalik")
+
+    if is_sideways:
+        pantau = [
+            f"Breakout naik dari `{high_m15:.2f}` → potensi BUY",
+            f"Breakout turun dari `{low_m15:.2f}` → potensi SELL",
+        ]
 
     return {
-        "direction":       direction,
-        "adx":             adx_val,
-        "atr":             atr_val,
-        "atr_ma":          atr_ma_val,
-        "structure":       structure,
-        "passed":          passed,
-        "total":           total,
-        "current_price":   current_price,
-        "ema20_h1":        ema20_h1,
-        "ema50_h1":        ema50_h1,
-        "ema200_h4":       ema200_h4,
-        "high_m15":        high_m15,
-        "low_m15":         low_m15,
-        "move_label":      move_label,
-        "recommendation":  recommendation,
-        "entry_zone":      entry_zone,
-        "sl_level":        sl_level,
-        "tp1_level":       tp1_level,
-        "tp2_level":       tp2_level,
-        "pullback_ok":     pullback_ok,
-        "adx_ok":          adx_ok,
-        "atr_ok":          atr_ok,
-        "session_ok":      session_ok,
-        "news_ok":         news_ok,
+        "direction":        direction,
+        "adx":              adx_val,
+        "atr":              atr_val,
+        "atr_ma":           atr_ma_val,
+        "structure":        structure,
+        "passed":           passed,
+        "total":            total,
+        "current_price":    current_price,
+        "ema20_h1":         ema20_h1,
+        "ema50_h1":         ema50_h1,
+        "ema200_h4":        ema200_h4,
+        "high_m15":         high_m15,
+        "low_m15":          low_m15,
+        "move_label":       move_label,
+        "recommendation":   recommendation,
+        "entry_zone":       entry_zone,
+        "sl_level":         sl_level,
+        "tp1_level":        tp1_level,
+        "tp2_level":        tp2_level,
+        "tp3_level":        tp3_level,
+        "pullback_ok":      pullback_ok,
+        "adx_ok":           adx_ok,
+        "atr_ok":           atr_ok,
+        "session_ok":       session_ok,
+        "news_ok":          news_ok,
         "missing_filters":  missing_filters,
         "momentum_label":   momentum_label,
         "is_sideways":      is_sideways,
         "narasi":           narasi,
         "bounce_zone":      bounce_zone,
         "is_exhaustion":    is_exhaustion,
+        "avg_body_pip":     avg_body,
         "move_from_high":   move_from_high,
         "move_from_low":    move_from_low,
         "pullback_pips":    pullback_pips,
         "pullback_size":    pullback_size,
+        "pantau":           pantau,
     }
 
 

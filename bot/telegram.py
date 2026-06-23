@@ -99,86 +99,131 @@ def notify_pyramid(direction: str, symbol: str, entry: float, sl: float, tp1: fl
 
 def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
     """
-    Kirim analisa market lengkap ke Telegram setiap 5 menit.
-    data = dict dari signals.build_analysis()
-    positions = list of dict: {direction, entry, sl, tp1, tp2, current, pnl, lot}
+    Kirim analisa market terstruktur ke Telegram setiap 5 menit.
+    Format: Header | Situasi M15 | Situasi M5 | Rekomendasi | Yang Perlu Dipantau | Posisi
     """
     from datetime import datetime
-    symbol    = data.get("symbol", "XAUUSD")
-    direction = data.get("direction", "—")
-    passed    = data.get("passed", 0)
-    total     = data.get("total", 8)
-    adx       = data.get("adx", 0)
-    atr       = data.get("atr", 0)
-    structure = data.get("structure", "")
-    current   = data.get("current_price", 0)
-    ema20     = data.get("ema20_h1", 0)
-    ema50     = data.get("ema50_h1", 0)
-    high20    = data.get("high_m15", 0)
-    low20     = data.get("low_m15", 0)
-    move      = data.get("move_label", "")
-    momentum  = data.get("momentum_label", "")
-    narasi    = data.get("narasi", "")
-    bounce    = data.get("bounce_zone", "")
-    exhaustion= data.get("is_exhaustion", False)
-    rec       = data.get("recommendation", "")
-    entry_z   = data.get("entry_zone", "")
-    sl_l      = data.get("sl_level", "")
-    tp1_l     = data.get("tp1_level", "")
-    tp2_l     = data.get("tp2_level", "")
-    missing   = data.get("missing_filters", [])
+    symbol     = data.get("symbol", "XAUUSD")
+    direction  = data.get("direction", "—")
+    passed     = data.get("passed", 0)
+    total      = data.get("total", 8)
+    adx        = data.get("adx", 0)
+    atr        = data.get("atr", 0)
+    structure  = data.get("structure", "")
+    current    = data.get("current_price", 0)
+    ema20      = data.get("ema20_h1", 0)
+    ema50      = data.get("ema50_h1", 0)
+    high20     = data.get("high_m15", 0)
+    low20      = data.get("low_m15", 0)
+    momentum   = data.get("momentum_label", "")
+    is_sideways= data.get("is_sideways", False)
+    exhaustion = data.get("is_exhaustion", False)
+    avg_body   = data.get("avg_body_pip", 0)
+    move_from_high = data.get("move_from_high", 0)
+    move_from_low  = data.get("move_from_low", 0)
+    pullback_pips  = data.get("pullback_pips", 0)
+    pullback_size  = data.get("pullback_size", "")
+    bounce_zone    = data.get("bounce_zone", "")
+    entry_z    = data.get("entry_zone", "")
+    sl_l       = data.get("sl_level", "")
+    tp1_l      = data.get("tp1_level", "")
+    tp2_l      = data.get("tp2_level", "")
+    tp3_l      = data.get("tp3_level", "")
+    missing    = data.get("missing_filters", [])
+    pantau     = data.get("pantau", [])
 
     arrow = "🟢 BUY" if direction == "BUY" else ("🔴 SELL" if direction == "SELL" else "⚪ SIDEWAYS")
-    filter_icon = "🟢" if passed >= total else ("🔥" if passed >= 6 else ("⏳" if passed >= 4 else "💤"))
+    filter_icon = "✅" if passed >= total else ("🔥" if passed >= 6 else ("⏳" if passed >= 4 else "💤"))
     struct_short = {
         "BULLISH_BOS": "BOS↑", "BEARISH_BOS": "BOS↓",
         "BULLISH_CHOCH": "CHoCH↑", "BEARISH_CHOCH": "CHoCH↓",
-    }.get(structure, structure[:8] if structure else "—")
-
+    }.get(structure, structure[:8] if structure else "NO_STRUC")
     now_str = datetime.now().strftime("%H:%M")
 
-    lines = [
-        f"📊 *Market Analysis — {symbol}* `{now_str}`",
-        f"",
-        f"*Trend H4*  : {arrow}",
-        f"*Momentum*  : {momentum}",
-        f"*Gerakan*   : {move}",
-        f"*Struktur*  : `{struct_short}` | ATR `{atr:.2f}`",
-        f"*Level EMA* : EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}`",
-        f"*Range M15* : High `{high20:.2f}` — Low `{low20:.2f}`",
-        f"*Filter*    : {filter_icon} `{passed}/{total}` lolos",
-    ]
+    lines = [f"📊 *Analisa {symbol}* `{now_str}` — {arrow} {filter_icon} `{passed}/{total}`", ""]
 
-    if narasi:
-        lines += ["", f"💬 {narasi}"]
+    # ── Situasi M15 ────────────────────────────────────────────────
+    lines.append("*📈 Situasi M15:*")
+    if direction == "SELL":
+        lines.append(f"Downtrend — harga turun *{move_from_high:.0f} pip* dari high `{high20:.2f}`")
+    elif direction == "BUY":
+        lines.append(f"Uptrend — harga naik *{move_from_low:.0f} pip* dari low `{low20:.2f}`")
+    else:
+        lines.append("Ranging — belum ada trend jelas")
 
-    lines += ["", f"📌 *{rec}*"]
+    lines.append(f"Struktur: `{struct_short}` | {momentum}")
+    lines.append(f"EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}` | ATR=`{atr:.2f}`")
+    lines.append(f"Range: `{low20:.2f}` — `{high20:.2f}`")
+
+    if pullback_pips > 10:
+        pb_icon = "⚠️" if pullback_size == "besar" else "↩️"
+        lines.append(f"{pb_icon} Pullback *{pullback_size}* {pullback_pips:.0f} pip dari low")
+
+    # ── Situasi M5 ─────────────────────────────────────────────────
+    lines += ["", "*📉 Situasi M5:*"]
+    if exhaustion:
+        lines.append(f"Candle kecil — konsolidasi/exhaustion (avg body {avg_body:.1f} pip)")
+    else:
+        lines.append(f"Candle aktif — momentum masih berjalan (avg body {avg_body:.1f} pip)")
+
+    if is_sideways:
+        lines.append("⚪ ADX lemah — pasar ranging di M5")
+    elif adx >= 45:
+        lines.append(f"🔴 Momentum sangat kuat (ADX {adx:.1f}) — strong trend mode aktif")
+    elif adx >= 25:
+        lines.append(f"🟢 Momentum trending (ADX {adx:.1f})")
+
+    # ── Rekomendasi ────────────────────────────────────────────────
+    lines += ["", "*📌 Rekomendasi:*"]
+    if is_sideways:
+        lines.append(f"TUNGGU — pasar ranging, hindari entry")
+        lines.append(f"Pantau breakout dari range `{low20:.2f}`–`{high20:.2f}`")
+    elif entry_z:
+        if passed >= 7:
+            lines.append(f"✅ *SIAP ENTRY {arrow}* di `{entry_z}`")
+        elif passed == 6:
+            lines.append(f"⚡ *POTENSI ENTRY {arrow}* di `{entry_z}` — pertimbangkan entry manual")
+        elif pullback_size == "besar" and direction:
+            opp = "BUY" if direction == "SELL" else "SELL"
+            lines.append(f"⚠️ Pullback besar — bisa scalp *{opp}* counter-trend ke `{entry_z}`")
+            lines.append(f"ATAU tunggu rejection di zona lalu *{direction}* ulang")
+        elif bounce_zone:
+            lines.append(f"⏳ Tunggu *{direction}* — harga pullback, zona entry: `{bounce_zone}`")
+            lines.append(f"Cari rejection candle di zona tersebut")
+        lines += [
+            f"SL  : `{sl_l}`",
+            f"TP1 : `{tp1_l}` | TP2 : `{tp2_l}`" + (f" | TP3 : `{tp3_l}`" if tp3_l else ""),
+        ]
+    else:
+        if direction == "SELL":
+            lines.append(f"MONITOR — tunggu pullback ke EMA20 `{ema20:.2f}` lalu cari rejection → SELL")
+        elif direction == "BUY":
+            lines.append(f"MONITOR — tunggu pullback ke EMA20 `{ema20:.2f}` lalu cari bounce → BUY")
+        else:
+            lines.append("TUNGGU — trend H4 belum jelas")
 
     if missing:
-        lines.append(f"❌ Belum lolos: `{'`, `'.join(missing)}`")
+        lines.append(f"❌ Filter belum lolos: `{'`, `'.join(missing)}`")
 
-    if entry_z:
-        lines += [
-            f"",
-            f"*Entry zona* : `{entry_z}`",
-            f"*SL*         : `{sl_l}`",
-            f"*TP1*        : `{tp1_l}`",
-            f"*TP2*        : `{tp2_l}`",
-        ]
+    # ── Yang perlu dipantau ────────────────────────────────────────
+    if pantau:
+        lines += ["", "*👁 Yang perlu dipantau:*"]
+        for p in pantau:
+            lines.append(f"• {p}")
 
+    # ── Posisi aktif ───────────────────────────────────────────────
     if positions:
         lines.append("")
         for p in positions:
-            pnl_str    = f"{p['pnl']:+,.0f} {currency}"
-            dist_tp1   = abs(p['tp1'] - p['current'])
-            dist_sl    = abs(p['sl'] - p['current'])
-            pos_icon   = "🟢" if p['pnl'] >= 0 else "🔴"
+            pnl_str  = f"{p['pnl']:+,.0f} {currency}"
+            dist_tp1 = abs(p['tp1'] - p['current'])
+            dist_sl  = abs(p['sl'] - p['current'])
+            pos_icon = "🟢" if p['pnl'] >= 0 else "🔴"
             lines += [
-                f"─────────────────────",
+                "─────────────────────",
                 f"📍 *Posisi {p['direction']}* {pos_icon} `{pnl_str}`",
-                f"Entry `{p['entry']:.2f}` → Sekarang `{p['current']:.2f}`",
+                f"Entry `{p['entry']:.2f}` → Kini `{p['current']:.2f}`",
                 f"SL `{p['sl']:.2f}` ({dist_sl:.1f} buffer) | TP1 `{p['tp1']:.2f}` ({dist_tp1:.1f} lagi)",
-                f"TP2 `{p['tp2']:.2f}` | Lot `{p['lot']}`",
             ]
     else:
         lines += ["", "📭 Tidak ada posisi terbuka"]
