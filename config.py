@@ -17,8 +17,9 @@ MAGIC_NUMBER = int(os.getenv("MAGIC_NUMBER", 202406))
 SLIPPAGE = int(os.getenv("SLIPPAGE", 20))
 
 # Session (WIB = UTC+7)
+SESSION_ENABLED   = os.getenv("SESSION_ENABLED", "true").lower() == "true"
 SESSION_START_WIB = int(os.getenv("SESSION_START_WIB", 13))
-SESSION_END_WIB = int(os.getenv("SESSION_END_WIB", 1))
+SESSION_END_WIB   = int(os.getenv("SESSION_END_WIB", 1))
 
 # Telegram
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", os.getenv("TELEGRAM_BOT_TOKEN", ""))
