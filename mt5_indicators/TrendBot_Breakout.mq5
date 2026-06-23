@@ -1,24 +1,15 @@
 //+------------------------------------------------------------------+
 //| TrendBot_Breakout.mq5                                            |
-//| Deteksi pola kompresi + sinyal breakout                          |
-//|                                                                  |
-//| Pola: Descending Triangle, Ascending Triangle, Wedge, Range      |
-//| Visual:                                                          |
-//|   Kotak kuning  = zona kompresi aktif                            |
-//|   Garis merah   = resistance                                     |
-//|   Garis hijau   = support                                        |
-//|   Panah biru ↑  = BUY breakout                                   |
-//|   Panah merah ↓ = SELL breakdown                                 |
+//| Deteksi kompresi (Triangle/Wedge/Range) + sinyal breakout        |
 //+------------------------------------------------------------------+
 #property copyright   ""
-#property version     "1.00"
+#property version     "1.10"
 #property strict
 #property indicator_chart_window
 #property indicator_plots 0
 
-//── Input ─────────────────────────────────────────────────────────
 input int    InpLookback    = 30;    // Bar untuk scan kompresi
-input int    InpMinBars     = 8;     // Min bar kompres sebelum valid
+input int    InpMinBars     = 8;     // Min bar kompres
 input double InpMaxRangePip = 35.0; // Max range zona (pip)
 input double InpBodyRatio   = 0.45; // Body candle min (breakout)
 input double InpAdxMin      = 18.0; // ADX minimum
@@ -31,16 +22,18 @@ input color  InpColorSupport= clrLimeGreen;
 input bool   InpShowLabel   = true;
 input bool   InpAlertOn     = true;
 
-//── Global ────────────────────────────────────────────────────────
 double   g_pip;
 datetime g_last_buy  = 0;
 datetime g_last_sell = 0;
+bool     g_initialized = false;
 
 //+------------------------------------------------------------------+
 int OnInit()
 {
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   // XAUUSD: point=0.01 → pip=1.0 | Forex: point=0.00001 → pip=0.0001
    g_pip = (point >= 0.01) ? 1.0 : point * 10.0;
+   g_initialized = false;
 
    IndicatorSetString(INDICATOR_SHORTNAME,
       StringFormat("TrendBot Breakout (%d bar / %.0f pip)", InpLookback, InpMaxRangePip));
@@ -68,95 +61,105 @@ int OnCalculate(const int      rates_total,
    if (rates_total < InpLookback + 10)
       return 0;
 
-   // Set sebagai series — index 0 = candle terbaru
    ArraySetAsSeries(time,  true);
    ArraySetAsSeries(open,  true);
    ArraySetAsSeries(high,  true);
    ArraySetAsSeries(low,   true);
    ArraySetAsSeries(close, true);
 
-   // Hanya proses bar terbaru (real-time) + sedikit ke belakang
-   int limit = (prev_calculated == 0) ? MathMin(rates_total - InpLookback - 5, 300) : 3;
+   // Saat pertama kali load: scan histori untuk gambar visual saja (tanpa alert)
+   // Setelah init selesai: hanya proses bar terbaru (real-time)
+   bool first_run = !g_initialized;
+   if (!g_initialized)
+      g_initialized = true;
+
+   int limit = first_run ? MathMin(rates_total - InpLookback - 5, 500) : 3;
 
    for (int i = 1; i <= limit; i++)
    {
-      if (i + InpLookback >= rates_total) continue;
+      if (i + InpLookback + 2 >= rates_total) continue;
 
-      // Kumpulkan swing high/low dalam window [i .. i+lookback]
-      double res = 0, sup = 999999;
-      double r_first = 0, r_last = 0, s_first = 0, s_last = 0;
+      // ── Cari swing high/low dalam window ──────────────────────
+      double res = 0.0, sup = DBL_MAX;
+      double r_recent = 0.0, r_old = 0.0;   // swing high terbaru dan terlama
+      double s_recent = DBL_MAX, s_old = DBL_MAX;
       int    r_count = 0, s_count = 0;
 
-      for (int j = i + 1; j < i + InpLookback - 2 && j + 2 < rates_total; j++)
+      int j_start = i + 1;
+      int j_end   = i + InpLookback - 2;
+
+      for (int j = j_start; j <= j_end && j + 2 < rates_total; j++)
       {
-         // Swing high
-         if (high[j] > high[j-1] && high[j] > high[j+1] &&
-             high[j] > high[j-2] && high[j] > high[j+2])
+         // Swing high: lokal maxima (dengan buffer 2 bar kiri/kanan)
+         if (high[j] > high[j-1] && high[j] > high[j+1])
          {
-            if (r_count == 0) { r_first = high[j]; r_last = high[j]; }
-            else              { r_last  = high[j]; }
             if (high[j] > res) res = high[j];
+            if (r_count == 0) r_recent = high[j];
+            r_old = high[j];
             r_count++;
          }
-         // Swing low
-         if (low[j] < low[j-1] && low[j] < low[j+1] &&
-             low[j] < low[j-2] && low[j] < low[j+2])
+         // Swing low: lokal minima
+         if (low[j] < low[j-1] && low[j] < low[j+1])
          {
-            if (s_count == 0) { s_first = low[j]; s_last = low[j]; }
-            else              { s_last  = low[j]; }
             if (low[j] < sup) sup = low[j];
+            if (s_count == 0) s_recent = low[j];
+            s_old = low[j];
             s_count++;
          }
       }
 
-      // Fallback jika swing tidak cukup
-      if (r_count < 2 || s_count < 2)
+      // Fallback: pakai high/low sederhana jika swing tidak cukup
+      if (r_count < 2 || s_count < 2 || res <= 0 || sup >= DBL_MAX / 2)
       {
-         res = 0; sup = 999999;
-         for (int j = i; j < i + InpLookback && j < rates_total; j++)
+         res = 0.0; sup = DBL_MAX;
+         for (int j = i; j <= i + InpLookback && j < rates_total; j++)
          {
             if (high[j] > res) res = high[j];
             if (low[j]  < sup) sup = low[j];
          }
-         r_first = r_last = res;
-         s_first = s_last = sup;
+         r_recent = r_old = res;
+         s_recent = s_old = sup;
       }
 
-      if (res <= 0 || sup >= 999998) continue;
+      // Validasi dasar
+      if (res <= 0 || sup >= DBL_MAX / 2 || res <= sup) continue;
 
       double range_pip = (res - sup) / g_pip;
-      if (range_pip > InpMaxRangePip || range_pip < 3.0) continue;
+      if (range_pip > InpMaxRangePip || range_pip < 2.0) continue;
 
-      // Deteksi pola
-      double r_change = r_first - r_last;  // positif = resistance turun (first lebih baru)
-      double s_change = s_first - s_last;  // negatif = support naik
+      // ── Deteksi pola ──────────────────────────────────────────
+      // r_recent = swing high paling baru, r_old = paling lama
+      // Descending Triangle: resistance TURUN (r_recent < r_old)
+      // Ascending Triangle : support NAIK   (s_recent > s_old)
+      double r_diff = r_old - r_recent;  // positif = resistance turun
+      double s_diff = s_recent - s_old;  // positif = support naik
 
       string pattern;
-      if (r_change > g_pip * 2 && MathAbs(s_change) < g_pip * 3)
+      if (r_diff > g_pip * 2 && MathAbs(s_diff) < g_pip * 3)
          pattern = "Descending Triangle";
-      else if (s_change < -g_pip * 2 && MathAbs(r_change) < g_pip * 3)
+      else if (s_diff > g_pip * 2 && MathAbs(r_diff) < g_pip * 3)
          pattern = "Ascending Triangle";
-      else if (r_change > g_pip && s_change < -g_pip)
+      else if (r_diff > g_pip && s_diff > g_pip)
          pattern = "Wedge";
       else
          pattern = "Range";
 
-      // ADX
+      // ── ADX ───────────────────────────────────────────────────
       double adx_val = CalcAdx(i, rates_total, high, low, close);
       if (adx_val < InpAdxMin) continue;
 
-      // Gambar zona aktif (hanya di bar terbaru i=1)
+      // ── Gambar zona di bar terbaru ────────────────────────────
       if (i == 1)
-      {
-         DrawZone(time[i + InpLookback - 1], time[i], res, sup, range_pip, pattern, adx_val);
-      }
+         DrawZone(time[j_end], time[i], res, sup, range_pip, pattern, adx_val);
 
-      // Cek breakout pada candle [i]
+      // ── Cek breakout pada candle [i] ──────────────────────────
       double o_c = open[i], h_c = high[i], l_c = low[i], c_c = close[i];
       double body       = MathAbs(c_c - o_c);
       double full_range = h_c - l_c;
-      if (full_range < 0.001) continue;
-      bool   body_ok = (full_range > 0) && (body / full_range >= InpBodyRatio);
+      if (full_range < g_pip * 0.5) continue;
+
+      bool body_ok = (body / full_range >= InpBodyRatio);
+      bool alert_ok = !first_run && InpAlertOn;  // TIDAK alert saat scan histori
 
       // BUY breakout
       if (c_c > res + g_pip && body_ok && c_c > o_c)
@@ -167,13 +170,14 @@ int OnCalculate(const int      rates_total,
             DrawArrow(nm, time[i], l_c - g_pip * 4, true);
             if (InpShowLabel)
                DrawText(StringFormat("TBB_LBLB_%d", (int)time[i]),
-                        time[i], l_c - g_pip * 8,
-                        StringFormat("BUY %.1f pip | %s", range_pip, pattern),
+                        time[i], l_c - g_pip * 9,
+                        StringFormat("BUY | %.1f pip\n%s", range_pip, pattern),
                         InpColorBuy);
-            if (InpAlertOn && time[i] > g_last_buy)
+            if (alert_ok && time[i] > g_last_buy)
             {
-               Alert(StringFormat("TrendBot BUY Breakout | %s | %s | Range=%.1f pip | ADX=%.1f",
-                                  _Symbol, pattern, range_pip, adx_val));
+               Alert(StringFormat(
+                  "TrendBot BUY Breakout | %s | %s\nRange=%.1f pip | ADX=%.1f",
+                  _Symbol, pattern, range_pip, adx_val));
                g_last_buy = time[i];
             }
          }
@@ -188,13 +192,14 @@ int OnCalculate(const int      rates_total,
             DrawArrow(nm, time[i], h_c + g_pip * 4, false);
             if (InpShowLabel)
                DrawText(StringFormat("TBB_LBLS_%d", (int)time[i]),
-                        time[i], h_c + g_pip * 8,
-                        StringFormat("SELL %.1f pip | %s", range_pip, pattern),
+                        time[i], h_c + g_pip * 9,
+                        StringFormat("SELL | %.1f pip\n%s", range_pip, pattern),
                         InpColorSell);
-            if (InpAlertOn && time[i] > g_last_sell)
+            if (alert_ok && time[i] > g_last_sell)
             {
-               Alert(StringFormat("TrendBot SELL Breakdown | %s | %s | Range=%.1f pip | ADX=%.1f",
-                                  _Symbol, pattern, range_pip, adx_val));
+               Alert(StringFormat(
+                  "TrendBot SELL Breakdown | %s | %s\nRange=%.1f pip | ADX=%.1f",
+                  _Symbol, pattern, range_pip, adx_val));
                g_last_sell = time[i];
             }
          }
@@ -212,23 +217,22 @@ double CalcAdx(int bar, int total,
    if (bar + p * 2 + 2 >= total) return 0;
 
    double tr_s = 0, dp_s = 0, dm_s = 0;
-   for (int k = bar + 1; k <= bar + p; k++)
+   for (int k = bar + 1; k <= bar + p && k + 1 < total; k++)
    {
-      if (k + 1 >= total) break;
-      double tr  = MathMax(high[k] - low[k],
-                   MathMax(MathAbs(high[k] - close[k+1]),
-                           MathAbs(low[k]  - close[k+1])));
-      double dp  = (high[k] - high[k+1] > 0 && high[k] - high[k+1] > low[k+1] - low[k])
-                   ? high[k] - high[k+1] : 0;
-      double dm  = (low[k+1] - low[k] > 0 && low[k+1] - low[k] > high[k] - high[k+1])
-                   ? low[k+1] - low[k] : 0;
+      double tr = MathMax(high[k] - low[k],
+                  MathMax(MathAbs(high[k] - close[k+1]),
+                          MathAbs(low[k]  - close[k+1])));
+      double dh = high[k] - high[k+1];
+      double dl = low[k+1] - low[k];
+      double dp = (dh > dl && dh > 0) ? dh : 0;
+      double dm = (dl > dh && dl > 0) ? dl : 0;
       tr_s += tr; dp_s += dp; dm_s += dm;
    }
    if (tr_s < 0.0001) return 0;
    double dip = 100.0 * dp_s / tr_s;
    double dim = 100.0 * dm_s / tr_s;
    double sum = dip + dim;
-   return (sum > 0) ? 100.0 * MathAbs(dip - dim) / sum : 0;
+   return (sum > 0.0001) ? 100.0 * MathAbs(dip - dim) / sum : 0;
 }
 
 //+------------------------------------------------------------------+
@@ -236,12 +240,13 @@ void DrawZone(datetime t1, datetime t2,
               double res, double sup,
               double range_pip, string pattern, double adx)
 {
+   // Hapus objek zona lama
    ObjectsDeleteAll(0, "TBB_ZONE");
    ObjectsDeleteAll(0, "TBB_RES");
    ObjectsDeleteAll(0, "TBB_SUP");
    ObjectsDeleteAll(0, "TBB_INFO");
 
-   // Kotak zona
+   // Kotak kompresi
    string zn = "TBB_ZONE_box";
    if (ObjectCreate(0, zn, OBJ_RECTANGLE, 0, t1, res, t2, sup))
    {
@@ -272,7 +277,7 @@ void DrawZone(datetime t1, datetime t2,
       ObjectSetInteger(0, sn, OBJPROP_RAY_RIGHT, false);
    }
 
-   // Label
+   // Label info
    if (InpShowLabel)
    {
       string in = "TBB_INFO_txt";
