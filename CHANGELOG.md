@@ -5,6 +5,20 @@ Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.1] — 2026-06-23
+
+### Added
+- **Zone Signal Entry** — sinyal otomatis saat harga masuk rectangle + candle konfirmasi:
+  - `signals.scan_zone_entry()` dipanggil setiap 5 detik di main loop
+  - Syarat: harga di dalam zona (±3 pip buffer) + candle Pin Bar/Engulfing di M5/M15 + ADX ≥ ADX_MIN
+  - Tidak butuh filter H4/pullback — lebih cepat dan responsif
+  - Notif `📦 ZONE SIGNAL` menampilkan: zona, candle, struktur M15, ADX, SL/TP1/TP2
+  - Label searah/counter-trend H4 otomatis untuk konteks risiko
+  - Throttle: 1 alert per zona per ALERT_COOLDOWN_SECONDS
+- `telegram.notify_zone_signal()` — format notif khusus zone entry
+
+---
+
 ## [2.1.0] — 2026-06-23
 
 ### Added

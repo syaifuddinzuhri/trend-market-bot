@@ -344,6 +344,9 @@ def _run_signal_cycle():
     # ── Tampilkan status semua filter (untuk monitoring & manual entry) ──
     signals.scan_log(df_h4, df_h1, df_m15, df_m5)
 
+    # ── Scan sinyal entry berbasis zona S/R dari MT5 rectangle ──────
+    signals.scan_zone_entry(df_h1, df_m15, df_m5)
+
     # ── Kelola posisi terbuka (TP1/TP2/Trail/Pyramid) ────────────
     trade.manage_open_positions(config.SYMBOL, df_h1=df_h1)
 

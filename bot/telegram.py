@@ -319,6 +319,55 @@ def notify_alert_manual(
     send("\n".join(lines))
 
 
+def notify_zone_signal(
+    direction: str,
+    symbol: str,
+    zone: dict,
+    pattern: str,
+    entry_tf: str,
+    entry: float,
+    sl: float,
+    tp1: float,
+    tp2: float,
+    adx: float,
+    struct_short: str,
+    with_trend: bool,
+    h4_direction: str,
+):
+    """Alert entry signal berbasis zona S/R yang di-draw di MT5."""
+    from datetime import datetime
+    arrow     = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
+    sl_dist   = abs(entry - sl)
+    tp1_dist  = abs(tp1 - entry)
+    tp2_dist  = abs(tp2 - entry)
+    rr1       = tp1_dist / sl_dist if sl_dist else 0
+    rr2       = tp2_dist / sl_dist if sl_dist else 0
+    now_str   = datetime.now().strftime("%H:%M")
+
+    zone_label = zone.get("label") or zone.get("zone_type", "")
+    zone_type  = zone.get("zone_type", "")
+
+    zone_icon = "🔴" if zone_type == "SUPPLY" else ("🟢" if zone_type == "DEMAND" else "🟡")
+    trend_tag = (
+        "✅ _Searah trend H4_" if with_trend else
+        f"⚠️ _Counter-trend (H4={'—' if not h4_direction else h4_direction})_"
+    )
+
+    msg = (
+        f"📦 *ZONE SIGNAL {arrow} — {symbol}* `{now_str}`\n"
+        f"\n"
+        f"{zone_icon} Zona : *{zone_label}* `{zone['low']:.2f}`–`{zone['high']:.2f}`\n"
+        f"Candle : `{pattern}` [{entry_tf}] | Struktur : `{struct_short}`\n"
+        f"ADX    : `{adx:.1f}` | {trend_tag}\n"
+        f"\n"
+        f"Entry  : `{entry:.2f}`\n"
+        f"SL     : `{sl:.2f}`  ({sl_dist:.1f} pip)\n"
+        f"TP1    : `{tp1:.2f}`  (+{tp1_dist:.1f} pip | RR 1:{rr1:.1f})\n"
+        f"TP2    : `{tp2:.2f}`  (+{tp2_dist:.1f} pip | RR 1:{rr2:.1f})\n"
+    )
+    send(msg)
+
+
 def notify_counter_trend(
     direction: str,
     main_direction: str,
