@@ -37,6 +37,18 @@ def _ok(v: bool) -> str:
     return "✅" if v else "❌"
 
 
+def _momentum_label(adx: float) -> tuple[str, bool]:
+    """Return (label_string, is_sideways)."""
+    if adx < 20:
+        return f"⚪ SIDEWAYS (ADX {adx:.1f}) — hindari entry", True
+    elif adx < 25:
+        return f"🟡 LEMAH (ADX {adx:.1f}) — hati-hati", False
+    elif adx < 40:
+        return f"🟢 TRENDING (ADX {adx:.1f})", False
+    else:
+        return f"🔴 TRENDING KUAT (ADX {adx:.1f})", False
+
+
 def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_m5: pd.DataFrame | None = None):
     """
     Cetak status semua filter setiap cycle — membantu entry manual di akun lain.
@@ -206,6 +218,7 @@ def scan_log(df_h4: pd.DataFrame, df_h1: pd.DataFrame, df_m15: pd.DataFrame, df_
                     tp3=tp3_price,
                     missing=missing,
                     move_label=move_label,
+                    momentum_label=_momentum_label(adx_val)[0],
                     ema20=ema20_h1,
                     ema50=ema50_h1,
                     high_m15=high_m15,
@@ -283,6 +296,9 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         move_label = "Ranging / tidak jelas"
         is_pullback_now = False
 
+    # ── Momentum / sideways detection ────────────────────────────────
+    momentum_label, is_sideways = _momentum_label(adx_val)
+
     # ── Filter yang belum lolos ───────────────────────────────────────
     filter_names = ["Session", "News", "Trend H4", "ADX", "ATR", "Pullback H1", "Struktur M15", "Candle"]
     filter_vals  = [session_ok, news_ok, trend_ok, adx_ok, atr_ok, pullback_ok, struct_ok, candle_ok]
@@ -307,7 +323,13 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
             tp1_level  = f"{ref + config.TP1_PIPS * pip_size:.2f}"
             tp2_level  = f"{ref + config.TP2_PIPS * pip_size:.2f}"
 
-    if not trend_ok:
+    if is_sideways:
+        recommendation = (
+            f"⚪ SIDEWAYS — pasar ranging, ADX {adx_val:.1f} terlalu lemah\n"
+            f"Tunggu breakout dari range {low_m15:.2f}–{high_m15:.2f}"
+        )
+
+    elif not trend_ok:
         recommendation = "⏸ TUNGGU — Trend H4 belum jelas (EMA50 vs EMA200 belum silang)"
 
     elif passed >= 7:
@@ -339,7 +361,6 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         entry_zone = f"{target - atr_val * 0.3:.2f}–{target:.2f}"
 
     else:
-        # Trend ada tapi belum pullback — berikan info spesifik filter apa yang kurang
         arrow_txt = "🟢 BUY" if direction == "BUY" else "🔴 SELL"
         if direction == "SELL":
             next_action = f"Pantau apakah harga naik dulu ke EMA20 ({ema20_h1:.2f}) lalu balik turun"
@@ -375,7 +396,9 @@ def build_analysis(df_h4, df_h1, df_m15, df_m5=None) -> dict:
         "atr_ok":          atr_ok,
         "session_ok":      session_ok,
         "news_ok":         news_ok,
-        "missing_filters": missing_filters,
+        "missing_filters":  missing_filters,
+        "momentum_label":   momentum_label,
+        "is_sideways":      is_sideways,
     }
 
 

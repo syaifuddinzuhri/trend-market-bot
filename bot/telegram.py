@@ -117,6 +117,7 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
     high20    = data.get("high_m15", 0)
     low20     = data.get("low_m15", 0)
     move      = data.get("move_label", "")
+    momentum  = data.get("momentum_label", "")
     rec       = data.get("recommendation", "")
     entry_z   = data.get("entry_zone", "")
     sl_l      = data.get("sl_level", "")
@@ -137,8 +138,9 @@ def notify_analysis(data: dict, positions: list, currency: str = "IDR"):
         f"📊 *Market Analysis — {symbol}* `{now_str}`",
         f"",
         f"*Trend H4*  : {arrow}",
+        f"*Momentum*  : {momentum}",
         f"*Gerakan*   : {move}",
-        f"*Struktur*  : `{struct_short}` | ADX `{adx:.1f}` | ATR `{atr:.2f}`",
+        f"*Struktur*  : `{struct_short}` | ATR `{atr:.2f}`",
         f"*Level EMA* : EMA20=`{ema20:.2f}` EMA50=`{ema50:.2f}`",
         f"*Range M15* : High `{high20:.2f}` — Low `{low20:.2f}`",
         f"*Filter*    : {filter_icon} `{passed}/{total}` lolos",
@@ -195,6 +197,7 @@ def notify_alert_manual(
     tp3: float,
     missing: list[str],
     move_label: str = "",
+    momentum_label: str = "",
     ema20: float = 0,
     ema50: float = 0,
     high_m15: float = 0,
@@ -215,10 +218,11 @@ def notify_alert_manual(
     lines = [
         f"⚡ *ALERT MANUAL — {symbol}* `{now_str}`",
         f"",
-        f"*Arah*     : {arrow}  `{passed}/{total}` {filter_bar}",
-        f"*Gerakan*  : {move_label or '—'}",
-        f"*Struktur* : `{struct_short}` | Candle `{candle_short}`",
-        f"*ADX*      : `{adx:.1f}` | ATR `{atr_val:.2f}` / MA `{atr_ma:.2f}`",
+        f"*Arah*      : {arrow}  `{passed}/{total}` {filter_bar}",
+        f"*Momentum*  : {momentum_label or '—'}",
+        f"*Gerakan*   : {move_label or '—'}",
+        f"*Struktur*  : `{struct_short}` | Candle `{candle_short}`",
+        f"*ATR*       : `{atr_val:.2f}` / MA `{atr_ma:.2f}`",
     ]
 
     if ema20 or ema50:
